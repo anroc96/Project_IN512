@@ -11,6 +11,7 @@ from threading import Thread
 import numpy as np
 
 #TEST
+#TST2
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
     def __init__(self, server_ip):
