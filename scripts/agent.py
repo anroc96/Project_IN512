@@ -10,12 +10,10 @@ from my_constants import *
 from threading import Thread
 import numpy as np
 
-#TEST
-#TST2
+
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
     def __init__(self, server_ip):
-        #TODO: DEINE YOUR ATTRIBUTES HERE
 
         #DO NOT TOUCH THE FOLLOWING INSTRUCTIONS
         self.network = Network(server_ip=server_ip)
@@ -25,19 +23,40 @@ class Agent:
         env_conf = self.network.receive()
         self.x, self.y = env_conf["x"], env_conf["y"]   #initial agent position
         self.w, self.h = env_conf["w"], env_conf["h"]   #environment dimensions
-        cell_val = env_conf["cell_val"] #value of the cell the agent is located in
+        self.cell_val = env_conf["cell_val"] #value of the cell the agent is located in
+
+        #TODO: DEINE YOUR ATTRIBUTES HERE
+        self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
+        self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (values from 0 to 1)
+        self.heat_of_found_targets = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the heat of found targets to substract to cell_val
+
         Thread(target=self.msg_cb, daemon=True).start()
-        
+
 
     def msg_cb(self): 
         """ Method used to handle incoming messages """
         while self.running:
             msg = self.network.receive()
             print(msg)
-            
-            
-            
+    
+    
+
     #TODO: CREATE YOUR METHODS HERE...
+
+    def explore_cell(self):
+        self.explo[self.x, self.y] = 1 # Marking the cell as explored
+
+        # Updating believes with cell probability
+        self.believes[self.x, self.y] = self.cell_val - self.heat_of_found_targets[self.x, self.y]
+
+        # Todo: update belives in cells close to the position of the robot
+        # 1) Explore the map until a heat signature is found
+        # 2) Update believes using method in the last slides of the PPT and move towards target
+        # 3) Reset believes
+        # 3) Once target is found, substract heat of this target from cell_value
+    
+
+
 
 
 
