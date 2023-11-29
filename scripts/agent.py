@@ -49,9 +49,27 @@ class Agent:
     def explore_cell(self):
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
-        # Updating believes with cell probability
+        # Updating believes with cell value
         self.believes[self.x, self.y] = self.cell_val
-    
+        # Creating multiplier matrix to update the believes
+        believes_multiplier = np.ones((self.w, self.h))
+        for i in range(self.w): # For all columns in the map
+            for j in range(self.h): # For all cells in one column
+                if self.explo[i, j] == 0: # If that cell has not been visited
+                    if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
+                        if self.cell_val == 0:
+                            believes_multiplier[i, j] = 0.3
+                        elif self.cell_val == 0.3:
+                            believes_multiplier[i, j] = 0.6
+                        elif self.cell_val == 0.25:
+                            believes_multiplier[i, j] = 0.5
+                    elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
+                        if self.cell_val == 0:
+                            believes_multiplier[i, j] = 0.6
+        # Updating believes for cells around the robot (1 or 2 cells away)
+        self.believes = np.multiply(self.believes, believes_multiplier)
+
+
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
         # Creating colormap with explored cells
@@ -59,7 +77,7 @@ class Agent:
         # Adding believes as annotations on every cell
         for i in range(self.h):
             for j in range(self.w):
-                plt.annotate(str(np.flip(self.believes.T, 0)[j][i]), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
+                plt.annotate(str(round(np.flip(self.believes.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
         plt.axis('equal')
         plt.axis('off')
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
