@@ -60,14 +60,35 @@ class Agent:
                 if self.explo[i, j] == 0: # If that cell has not been visited
                     if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
                         if self.cell_val == 0:
-                            believes_multiplier[i, j] = 0.3
+                            believes_multiplier[i, j] = 0.8
                         elif self.cell_val == 0.3:
-                            believes_multiplier[i, j] = 0.6
+                            believes_multiplier[i, j] = 0.9
                         elif self.cell_val == 0.25:
-                            believes_multiplier[i, j] = 0.5
+                            believes_multiplier[i, j] = 0.9
                     elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
                         if self.cell_val == 0:
-                            believes_multiplier[i, j] = 0.6
+                            believes_multiplier[i, j] = 0.9
+                        elif self.cell_val == 0.6:
+                            believes_multiplier[i, j] = 0.9
+                        elif self.cell_val == 0.5:
+                            believes_multiplier[i, j] = 0.9
+                    elif self.x-3 <= i and i <= self.x+3 and self.y-3 <= j and j <= self.y+3: # If that cell is three cells away from the robot
+                        if self.cell_val == 0.3:
+                            believes_multiplier[i, j] = 0.9
+                        elif self.cell_val == 0.25:
+                            believes_multiplier[i, j] = 0.9
+                        elif self.cell_val == 0.6:
+                            believes_multiplier[i, j] = 0.8
+                        elif self.cell_val == 0.5:
+                            believes_multiplier[i, j] = 0.8
+                    elif self.x-4 <= i and i <= self.x+4 and self.y-4 <= j and j <= self.y+4: # If that cell is four cells away from the robot
+                        if self.cell_val == 0.3:
+                            believes_multiplier[i, j] = 0.8
+                        elif self.cell_val == 0.25:
+                            believes_multiplier[i, j] = 0.8
+                    else:
+                        if self.cell_val in [0.25, 0.3, 0.5, 0.6]:
+                            believes_multiplier[i, j] = 0
         # Updating believes for cells around the robot (1 or 2 cells away)
         self.believes = np.multiply(self.believes, believes_multiplier)
 
@@ -91,23 +112,15 @@ class Agent:
         
         # Find best possible next cells based on the belief of that cell and the total belief of surrounding cells
         possible_next_cells = np.array(possible_next_cells)
-        [_, _, max_cell_belief, max_total_belief] = np.amax(possible_next_cells, axis = 0)
+        [_, _, max_cell_belief, _] = np.amax(possible_next_cells, axis = 0)
         best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == max_cell_belief))]
+        [_, _, _, max_total_belief] = np.amax(best_next_cells, axis = 0)
         best_next_cells = best_next_cells[np.where((best_next_cells[:,3] == max_total_belief))]
         # Randomly choose a cell among the best possible cells
         idx = randint(0,len(best_next_cells)-1)
         chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
 
         # Convert cell coordinates into move
-        # 0 <-> Stand
-        # 1 <-> Left
-        # 2 <-> Right
-        # 3 <-> Up
-        # 4 <-> Down
-        # 5 <-> UL
-        # 6 <-> UR
-        # 7 <-> DL
-        # 8 <-> DR
         if chosen_next_cell[0] == self.x-1: # If next cell is on the left
             if chosen_next_cell[1] == self.y-1: # If next cell is above
                 self.next_move = 5 # UL
