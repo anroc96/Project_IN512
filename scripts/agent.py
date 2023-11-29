@@ -11,6 +11,7 @@ from threading import Thread
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+from random import randint
 
 
 class Agent:
@@ -31,6 +32,7 @@ class Agent:
         #TODO: DEINE YOUR ATTRIBUTES HERE
         self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
         self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (values from 0 to 1)
+        self.next_move = None # Next move chosen by the choose_next_move method
 
 
     def msg_cb(self): 
@@ -70,6 +72,72 @@ class Agent:
         self.believes = np.multiply(self.believes, believes_multiplier)
 
 
+    def choose_next_move(self):
+        # Create list of possible next cells
+        possible_next_cells = []
+        for i in range(self.w): # For all columns in the map
+            for j in range(self.h): # For all cells in one column
+                if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
+                    cell_belief = self.believes[i,j] # Get the belief from that cell
+                    # Count number of cells with a belief of 1 around that cell
+                    total_belief = 0 
+                    for ii in range(i-2, i+3): # For colums maximum two cells away
+                        for jj in range(j-2, j+3): # For rows maximum two cells away
+                            if ii in range(self.w) and jj in range(self.h): # If the indexes are inside the map
+                                if self.believes[ii, jj] == 1: # If that cell has a belief of 1
+                                    total_belief += 1
+                    # Append the list of possible next cells with cell belief and nb visited cell as criterions
+                    possible_next_cells.append([i, j, cell_belief, total_belief])
+        
+        # Find best possible next cells based on the belief of that cell and the total belief of surrounding cells
+        possible_next_cells = np.array(possible_next_cells)
+        [_, _, max_cell_belief, max_total_belief] = np.amax(possible_next_cells, axis = 0)
+        best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == max_cell_belief))]
+        best_next_cells = best_next_cells[np.where((best_next_cells[:,3] == max_total_belief))]
+        # Randomly choose a cell among the best possible cells
+        idx = randint(0,len(best_next_cells)-1)
+        chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
+
+        # Convert cell coordinates into move
+        # 0 <-> Stand
+        # 1 <-> Left
+        # 2 <-> Right
+        # 3 <-> Up
+        # 4 <-> Down
+        # 5 <-> UL
+        # 6 <-> UR
+        # 7 <-> DL
+        # 8 <-> DR
+        if chosen_next_cell[0] == self.x-1: # If next cell is on the left
+            if chosen_next_cell[1] == self.y-1: # If next cell is above
+                self.next_move = 5 # UL
+            elif chosen_next_cell[1] == self.y: # If next cell is on the same row
+                self.next_move = 1 # Left
+            elif chosen_next_cell[1] == self.y+1: # If next cell is under
+                self.next_move = 7 # DL
+            else:
+                print('The agent chose an impossible move.')
+        elif chosen_next_cell[0] == self.x: # If next cell is on the same column
+            if chosen_next_cell[1] == self.y-1: # If next cell is above
+                self.next_move = 3 # Up
+            elif chosen_next_cell[1] == self.y: # If next cell is on the same row
+                self.next_move = 0 # Stand
+            elif chosen_next_cell[1] == self.y+1: # If next cell is under
+                self.next_move = 4 # Down
+            else:
+                print('The agent chose an impossible move.')
+        elif chosen_next_cell[0] == self.x+1: # If next cell is on the right
+            if chosen_next_cell[1] == self.y-1: # If next cell is above
+                self.next_move = 6 # UR
+            elif chosen_next_cell[1] == self.y: # If next cell is on the same row
+                self.next_move = 2 # Right
+            elif chosen_next_cell[1] == self.y+1: # If next cell is under
+                self.next_move = 8 # DR
+            else:
+                print('The agent chose an impossible move.')
+        print(f'Position:{(self.x, self.y)}, Next cell:{chosen_next_cell}, Move:{self.next_move}')
+
+
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
         # Creating colormap with explored cells
@@ -100,6 +168,7 @@ if __name__ == "__main__":
     try:    #Manual control test
         while True:
             agent.explore_cell()
+            agent.choose_next_move()
             agent.plot_believes()
             cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
             if cmds["header"] == BROADCAST_MSG:
