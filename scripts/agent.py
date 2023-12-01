@@ -159,6 +159,9 @@ class Agent:
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
         plt.clf()   # Clear the matplotlib plot every time the robot moves
+        plt.clf()
+        plt.ion()
+        plt.show()
         # Creating colormap with explored cells
         plt.pcolormesh(np.flip(self.explo.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
         # Adding believes as annotations on every cell
