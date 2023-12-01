@@ -154,6 +154,8 @@ class Agent:
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
         plt.clf()
+        plt.ion()
+        plt.show()
         # Creating colormap with explored cells
         plt.pcolormesh(np.flip(self.explo.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
         # Adding believes as annotations on every cell
@@ -166,8 +168,8 @@ class Agent:
         # Add total number of visited cells
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
         plt.tight_layout()
-        time.sleep(0.1)
-        plt.show(block=False)
+        plt.draw()
+        plt.pause(0.1)
 
 
 
