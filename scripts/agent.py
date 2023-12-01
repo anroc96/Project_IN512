@@ -174,7 +174,7 @@ class Agent:
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
         plt.tight_layout() 
         plt.draw()
-        plt.pause()
+        plt.pause(0.01)
 
 
 
