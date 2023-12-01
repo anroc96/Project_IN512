@@ -159,7 +159,6 @@ class Agent:
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
         plt.clf()   # Clear the matplotlib plot every time the robot moves
-        plt.clf()
         plt.ion()
         plt.show()
         # Creating colormap with explored cells
