@@ -32,6 +32,7 @@ class Agent:
         #TODO: DEFINE YOUR ATTRIBUTES HERE
         self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
         self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (values from 0 to 1)
+        self.found_cell_values = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of known cell values to ignore already found items
         self.next_move = None # Next move chosen by the choose_next_move method
 
 
@@ -49,6 +50,23 @@ class Agent:
     #TODO: CREATE YOUR METHODS HERE...
 
     def explore_cell(self):
+        # Verify if the robot found an item
+        if self.cell_val == 1:
+            self.believes = np.ones((self.w, self.h)) # Resetting believes to search for a new item
+            self.explo = np.zeros((self.w, self.h)) ########### TO REVIEW ###########
+            # Assuming this is a box ############ TO REVIEW ################
+            for i in range(self.w): # For all columns in the map
+                for j in range(self.h): # For all cells in one column
+                    if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
+                        self.found_cell_values[i, j] = 0.6
+                    elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
+                        self.found_cell_values[i, j] = 0.3
+            self.found_cell_values[self.x, self.y] = 1
+
+        # Adjusting cell value if it corresponds to an item that has already been found ############ TO REVIEW ##########
+        if self.cell_val == self.found_cell_values[self.x, self.y]:
+            self.cell_val = 0 
+
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
         # Updating believes with cell value
@@ -174,7 +192,7 @@ class Agent:
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
         plt.tight_layout() 
         plt.draw()
-        plt.pause(0.01)
+        plt.pause(0.5)
 
 
 
@@ -201,7 +219,7 @@ if __name__ == "__main__":
             # elif cmds["header"] == MOVE:
             #     cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
             # agent.network.send(cmds)
-            time.sleep(0.1) # Added time sleep to allow for receiving incoming message in other thread before next iteration
+            time.sleep(1) # Added time sleep to allow for receiving incoming message in other thread before next iteration
 
     except KeyboardInterrupt:
         pass
