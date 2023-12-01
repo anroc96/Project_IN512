@@ -149,11 +149,16 @@ class Agent:
             else:
                 print('The agent chose an impossible move.')
         print(f'Position:{(self.x, self.y)}, Next cell:{chosen_next_cell}, Move:{self.next_move}')
-
+        
+    
+    def move(self):
+        if self.next_move:
+            self.network.send({"header": MOVE, "direction": self.next_move})
+        
 
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
-        plt.clf()
+        plt.clf()   # Clear the matplotlib plot every time the robot moves
         # Creating colormap with explored cells
         plt.pcolormesh(np.flip(self.explo.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
         # Adding believes as annotations on every cell
@@ -165,8 +170,7 @@ class Agent:
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
         # Add total number of visited cells
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
-        plt.tight_layout()
-        time.sleep(0.1)
+        plt.tight_layout() 
         plt.show(block=False)
 
 
@@ -185,15 +189,16 @@ if __name__ == "__main__":
             agent.explore_cell()
             agent.choose_next_move()
             agent.plot_believes()
-            cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
-            if cmds["header"] == BROADCAST_MSG:
-                cmds["Msg type"] = int(input("1 <-> Key discovered\n2 <-> Box discovered\n3 <-> Completed\n"))
-                cmds["position"] = (agent.x, agent.y)
-                cmds["owner"] = randint(0,3) # TODO: specify the owner of the item
-            elif cmds["header"] == MOVE:
-                cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
-            agent.network.send(cmds)
-            time.sleep(0.01) # Added time sleep to allow for receiving incoming message in other thread before next iteration
+            agent.move()
+            # cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
+            # if cmds["header"] == BROADCAST_MSG:
+            #     cmds["Msg type"] = int(input("1 <-> Key discovered\n2 <-> Box discovered\n3 <-> Completed\n"))
+            #     cmds["position"] = (agent.x, agent.y)
+            #     cmds["owner"] = randint(0,3) # TODO: specify the owner of the item
+            # elif cmds["header"] == MOVE:
+            #     cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
+            # agent.network.send(cmds)
+            time.sleep(0.1) # Added time sleep to allow for receiving incoming message in other thread before next iteration
 
     except KeyboardInterrupt:
         pass
