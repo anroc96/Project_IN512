@@ -29,7 +29,7 @@ class Agent:
         self.cell_val = env_conf["cell_val"] #value of the cell the agent is located in
         Thread(target=self.msg_cb, daemon=True).start()
 
-        #TODO: DEINE YOUR ATTRIBUTES HERE
+        #TODO: DEFINE YOUR ATTRIBUTES HERE
         self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
         self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (values from 0 to 1)
         self.next_move = None # Next move chosen by the choose_next_move method
@@ -153,6 +153,7 @@ class Agent:
 
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
+        plt.clf()
         # Creating colormap with explored cells
         plt.pcolormesh(np.flip(self.explo.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
         # Adding believes as annotations on every cell
@@ -165,7 +166,8 @@ class Agent:
         # Add total number of visited cells
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
         plt.tight_layout()
-        plt.show()
+        time.sleep(0.1)
+        plt.show(block=False)
 
 
 
