@@ -14,47 +14,20 @@ import time
 from random import randint
 
 # Defining a function to update believes
-def update_believes(x, y, cell_val, w, h, current_believes, explo, item_found):
-    new_believes = current_believes
-    # Creating multiplier matrix to update the believes
-    believes_multiplier = np.ones((w, h))
+def update_believes(x, y, cell_val, w, h, believes, explo, item_found):
+    # Updating believes for cells around the robot (1 or 2 cells away)
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
-            if explo[i, j] == 0: # If that cell has not been visited
-                if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
-                    if cell_val == 0:
-                        believes_multiplier[i, j] = 0.8
-                    elif cell_val == 0.3:
-                        believes_multiplier[i, j] = 0.9
-                    elif cell_val == 0.25:
-                        believes_multiplier[i, j] = 0.9
-                elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
-                    if cell_val == 0:
-                        believes_multiplier[i, j] = 0.9
-                    elif cell_val == 0.6:
-                        believes_multiplier[i, j] = 0.9
-                    elif cell_val == 0.5:
-                        believes_multiplier[i, j] = 0.9
-                elif x-3 <= i and i <= x+3 and y-3 <= j and j <= y+3: # If that cell is three cells away from the robot
-                    if cell_val == 0.3:
-                        believes_multiplier[i, j] = 0.9
-                    elif cell_val == 0.25:
-                        believes_multiplier[i, j] = 0.9
-                    elif cell_val == 0.6:
-                        believes_multiplier[i, j] = 0.8
-                    elif cell_val == 0.5:
-                        believes_multiplier[i, j] = 0.8
-                elif x-4 <= i and i <= x+4 and y-4 <= j and j <= y+4: # If that cell is four cells away from the robot
-                    if cell_val == 0.3:
-                        believes_multiplier[i, j] = 0.8
-                    elif cell_val == 0.25:
-                        believes_multiplier[i, j] = 0.8
-                else:
-                    if cell_val in [0.25, 0.3, 0.5, 0.6] and item_found == False:
-                        believes_multiplier[i, j] = 0
-    # Updating believes for cells around the robot (1 or 2 cells away)
-    new_believes = np.multiply(current_believes, believes_multiplier)
-    return new_believes
+            if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
+                if cell_val in [0, 0.25, 0.3]:
+                    believes[i, j] = 0
+            elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
+                if cell_val in [0, 0.5, 0.6]:
+                    believes[i, j] = 0
+            else:
+                if cell_val in [0.25, 0.3, 0.5, 0.6] and item_found == False:
+                    believes[i, j] = 0
+    return believes
 
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
@@ -74,6 +47,7 @@ class Agent:
         #TODO: DEFINE YOUR ATTRIBUTES HERE
         self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
         self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (values from 0 to 1)
+        self.cell_values = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of visited cell values
         self.found_cell_values = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of known cell values to ignore already found items
         self.next_move = None # Next move chosen by the choose_next_move method
         self.found_item_type = None # Type of the item that has just been found (0: key, 1: box)
@@ -100,6 +74,8 @@ class Agent:
     #TODO: CREATE YOUR METHODS HERE...
 
     def explore_cell(self):
+        self.cell_values[self.x, self.y] = self.cell_val
+
         # Adjusting cell value if it corresponds to an item that has already been found
         if self.cell_val == self.found_cell_values[self.x, self.y]:
             self.cell_val = 0
@@ -111,14 +87,12 @@ class Agent:
                 return # Exit the function to choose a move
             
             else: # If the item found has been identified
-                old_believes = self.believes # Keeping old believes in memory
                 self.believes = np.ones((self.w, self.h)) # Resetting believes to search for a new item
                 for i in range(self.w): # For all columns in the map
                     for j in range(self.h): # For all cells in one column
                         # Ajusting new believes considering cell visited before finding the target
                         if self.explo[i, j] == 1:
-                            self.believes[i, j] = old_believes[i, j]
-                            self.believes = update_believes(i, j, old_believes[i, j], self.w, self.h, self.believes, self.explo, True)
+                            self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, self.explo, True)
                         # Keeping known map values in memory to ignore found items
                         if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
                             if self.found_item_type == 0:
@@ -136,9 +110,7 @@ class Agent:
 
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
-        # Updating believes with cell value
-        self.believes[self.x, self.y] = self.cell_val
-        # Updating believes for cells around the robot (1 or 2 cells away)
+        # Updating believes for cells around the robot (0 to 2 cells away)
         self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, self.explo, False)
 
 
@@ -150,26 +122,23 @@ class Agent:
         else:
             # Create list of possible next cells
             possible_next_cells = []
-            for i in range(self.w): # For all columns in the map
-                for j in range(self.h): # For all cells in one column
-                    if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
-                        cell_belief = self.believes[i,j] # Get the belief from that cell
-                        # Count number of cells with a belief of 1 around that cell
-                        total_belief = 0 
-                        for ii in range(i-2, i+3): # For colums maximum two cells away
-                            for jj in range(j-2, j+3): # For rows maximum two cells away
-                                if ii in range(self.w) and jj in range(self.h): # If the indexes are inside the map
-                                    if self.believes[ii, jj] == 1: # If that cell has a belief of 1
-                                        total_belief += 1
+            for i in range(self.x-1, self.x+2): # For colums maximum one cell away
+                for j in range(self.y-1, self.y+2): # For rows maximum one cell away
+                    if i in range(self.w) and j in range(self.h) and (i, j) != (self.x, self.y): # If the indexes are inside the map and the cell is not the current cell
+                        # Count number of cells with a belief of 1 around that cell (sum of 1/distances)
+                        weighted_sum = 0 
+                        for ii in range(self.w): # For colums maximum two cells away
+                            for jj in range(self.h): # For rows maximum two cells away
+                                if self.believes[ii, jj] == 1: # If that cell has a belief of 1
+                                    distance = np.linalg.norm([ii-i, jj-j]) # Calculate the distance between these cells
+                                    weighted_sum += 1/(distance+0.0000001) # Greater weight for closer cells
                         # Append the list of possible next cells with cell belief and nb visited cell as criterions
-                        possible_next_cells.append([i, j, cell_belief, total_belief])
+                        possible_next_cells.append([i, j, weighted_sum])
             
-            # Find best possible next cells based on the belief of that cell and the total belief of surrounding cells
+            # Find best possible next cells based on the weighted sum of cells with belief of 1
             possible_next_cells = np.array(possible_next_cells)
-            [_, _, max_cell_belief, _] = np.amax(possible_next_cells, axis = 0)
-            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == max_cell_belief))]
-            [_, _, _, max_total_belief] = np.amax(best_next_cells, axis = 0)
-            best_next_cells = best_next_cells[np.where((best_next_cells[:,3] == max_total_belief))]
+            [_, _, max_weighted_sum] = np.amax(possible_next_cells, axis = 0)
+            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == max_weighted_sum))]
             # Randomly choose a cell among the best possible cells
             idx = randint(0,len(best_next_cells)-1)
             chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
@@ -182,8 +151,6 @@ class Agent:
                     self.next_move = (2,1) # Left
                 elif chosen_next_cell[1] == self.y+1: # If next cell is under
                     self.next_move = (2,7) # DL
-                else:
-                    print('The agent chose an impossible move.')
             elif chosen_next_cell[0] == self.x: # If next cell is on the same column
                 if chosen_next_cell[1] == self.y-1: # If next cell is above
                     self.next_move = (2,3) # Up
@@ -191,8 +158,6 @@ class Agent:
                     self.next_move = (2,0) # Stand
                 elif chosen_next_cell[1] == self.y+1: # If next cell is under
                     self.next_move = (2,4) # Down
-                else:
-                    print('The agent chose an impossible move.')
             elif chosen_next_cell[0] == self.x+1: # If next cell is on the right
                 if chosen_next_cell[1] == self.y-1: # If next cell is above
                     self.next_move = (2,6) # UR
@@ -200,8 +165,6 @@ class Agent:
                     self.next_move = (2,2) # Right
                 elif chosen_next_cell[1] == self.y+1: # If next cell is under
                     self.next_move = (2,8) # DR
-                else:
-                    print('The agent chose an impossible move.')
 
 
     def move(self):
@@ -219,10 +182,12 @@ class Agent:
         plt.show()
         # Creating colormap with explored cells
         plt.pcolormesh(np.flip(self.explo.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
+        # Creating array with cell values in visited cells and believes elsewhere
+        cellval_or_belief = np.maximum(self.believes, self.cell_values)
         # Adding believes as annotations on every cell
         for i in range(self.h):
             for j in range(self.w):
-                plt.annotate(str(round(np.flip(self.believes.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
+                plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
         plt.axis('equal')
         plt.axis('off')
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
@@ -230,7 +195,7 @@ class Agent:
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
         plt.tight_layout() 
         plt.draw()
-        plt.pause(0.5)
+        plt.pause(0.2)
 
 
 
