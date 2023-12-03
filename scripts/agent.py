@@ -13,6 +13,48 @@ import matplotlib.pyplot as plt
 import time
 from random import randint
 
+# Defining a function to update believes
+def update_believes(x, y, cell_val, w, h, current_believes, explo, item_found):
+    new_believes = current_believes
+    # Creating multiplier matrix to update the believes
+    believes_multiplier = np.ones((w, h))
+    for i in range(w): # For all columns in the map
+        for j in range(h): # For all cells in one column
+            if explo[i, j] == 0: # If that cell has not been visited
+                if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
+                    if cell_val == 0:
+                        believes_multiplier[i, j] = 0.8
+                    elif cell_val == 0.3:
+                        believes_multiplier[i, j] = 0.9
+                    elif cell_val == 0.25:
+                        believes_multiplier[i, j] = 0.9
+                elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
+                    if cell_val == 0:
+                        believes_multiplier[i, j] = 0.9
+                    elif cell_val == 0.6:
+                        believes_multiplier[i, j] = 0.9
+                    elif cell_val == 0.5:
+                        believes_multiplier[i, j] = 0.9
+                elif x-3 <= i and i <= x+3 and y-3 <= j and j <= y+3: # If that cell is three cells away from the robot
+                    if cell_val == 0.3:
+                        believes_multiplier[i, j] = 0.9
+                    elif cell_val == 0.25:
+                        believes_multiplier[i, j] = 0.9
+                    elif cell_val == 0.6:
+                        believes_multiplier[i, j] = 0.8
+                    elif cell_val == 0.5:
+                        believes_multiplier[i, j] = 0.8
+                elif x-4 <= i and i <= x+4 and y-4 <= j and j <= y+4: # If that cell is four cells away from the robot
+                    if cell_val == 0.3:
+                        believes_multiplier[i, j] = 0.8
+                    elif cell_val == 0.25:
+                        believes_multiplier[i, j] = 0.8
+                else:
+                    if cell_val in [0.25, 0.3, 0.5, 0.6] and item_found == False:
+                        believes_multiplier[i, j] = 0
+    # Updating believes for cells around the robot (1 or 2 cells away)
+    new_believes = np.multiply(current_believes, believes_multiplier)
+    return new_believes
 
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
@@ -68,74 +110,36 @@ class Agent:
                 self.found_item_flag = True
                 return # Exit the function to choose a move
             
-            elif self.found_item_type == 0: # If the item found has been identified as a key
-                self.found_item_type = None # Reset this variable to search for a new item
+            else: # If the item found has been identified
+                old_believes = self.believes # Keeping old believes in memory
                 self.believes = np.ones((self.w, self.h)) # Resetting believes to search for a new item
-                #self.explo = np.zeros((self.w, self.h)) ########### TO REVIEW ###########
-                self.cell_val = 0
                 for i in range(self.w): # For all columns in the map
                     for j in range(self.h): # For all cells in one column
+                        # Ajusting new believes considering cell visited before finding the target
+                        if self.explo[i, j] == 1:
+                            self.believes[i, j] = old_believes[i, j]
+                            self.believes = update_believes(i, j, old_believes[i, j], self.w, self.h, self.believes, self.explo, True)
+                        # Keeping known map values in memory to ignore found items
                         if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
-                            self.found_cell_values[i, j] = 0.5
+                            if self.found_item_type == 0:
+                                self.found_cell_values[i, j] = 0.5
+                            elif self.found_item_type == 1:
+                                self.found_cell_values[i, j] = 0.6
                         elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
-                            self.found_cell_values[i, j] = 0.25
+                            if self.found_item_type == 0:
+                                self.found_cell_values[i, j] = 0.25
+                            elif self.found_item_type == 1:
+                                self.found_cell_values[i, j] = 0.3
                 self.found_cell_values[self.x, self.y] = 1
-
-            elif self.found_item_type == 1: # If the item found has been identified as a box
-                self.found_item_type = None # Reset this variable to search for a new item
-                self.believes = np.ones((self.w, self.h)) # Resetting believes to search for a new item
-                #self.explo = np.zeros((self.w, self.h)) ########### TO REVIEW ###########
-                self.cell_val = 0
-                for i in range(self.w): # For all columns in the map
-                    for j in range(self.h): # For all cells in one column
-                        if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
-                            self.found_cell_values[i, j] = 0.6
-                        elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
-                            self.found_cell_values[i, j] = 0.3
-                self.found_cell_values[self.x, self.y] = 1
+                self.cell_val = 0 # Adjusting cell value because item has been found
+                self.found_item_type = None # Reseting this variable to search for a new item
 
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
         # Updating believes with cell value
         self.believes[self.x, self.y] = self.cell_val
-        # Creating multiplier matrix to update the believes
-        believes_multiplier = np.ones((self.w, self.h))
-        for i in range(self.w): # For all columns in the map
-            for j in range(self.h): # For all cells in one column
-                if self.explo[i, j] == 0: # If that cell has not been visited
-                    if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
-                        if self.cell_val == 0:
-                            believes_multiplier[i, j] = 0.8
-                        elif self.cell_val == 0.3:
-                            believes_multiplier[i, j] = 0.9
-                        elif self.cell_val == 0.25:
-                            believes_multiplier[i, j] = 0.9
-                    elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
-                        if self.cell_val == 0:
-                            believes_multiplier[i, j] = 0.9
-                        elif self.cell_val == 0.6:
-                            believes_multiplier[i, j] = 0.9
-                        elif self.cell_val == 0.5:
-                            believes_multiplier[i, j] = 0.9
-                    elif self.x-3 <= i and i <= self.x+3 and self.y-3 <= j and j <= self.y+3: # If that cell is three cells away from the robot
-                        if self.cell_val == 0.3:
-                            believes_multiplier[i, j] = 0.9
-                        elif self.cell_val == 0.25:
-                            believes_multiplier[i, j] = 0.9
-                        elif self.cell_val == 0.6:
-                            believes_multiplier[i, j] = 0.8
-                        elif self.cell_val == 0.5:
-                            believes_multiplier[i, j] = 0.8
-                    elif self.x-4 <= i and i <= self.x+4 and self.y-4 <= j and j <= self.y+4: # If that cell is four cells away from the robot
-                        if self.cell_val == 0.3:
-                            believes_multiplier[i, j] = 0.8
-                        elif self.cell_val == 0.25:
-                            believes_multiplier[i, j] = 0.8
-                    else:
-                        if self.cell_val in [0.25, 0.3, 0.5, 0.6]:
-                            believes_multiplier[i, j] = 0
         # Updating believes for cells around the robot (1 or 2 cells away)
-        self.believes = np.multiply(self.believes, believes_multiplier)
+        self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, self.explo, False)
 
 
     def choose_next_move(self):
@@ -242,8 +246,9 @@ if __name__ == "__main__":
     try:    #Manual control test
         while True:
             agent.explore_cell()
-            agent.choose_next_move()
             agent.plot_believes()
+            agent.choose_next_move()
+            time.sleep(1)
             agent.move()
             #cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
             #if cmds["header"] == BROADCAST_MSG:
@@ -253,7 +258,7 @@ if __name__ == "__main__":
             #elif cmds["header"] == MOVE:
             #    cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
             #agent.network.send(cmds)
-            time.sleep(2) # Added time sleep to allow for receiving incoming message in other thread before next iteration
+            time.sleep(0.5) # Added time sleep to allow for receiving incoming message in other thread before next iteration
 
     except KeyboardInterrupt:
         pass
