@@ -22,12 +22,28 @@ def update_believes(x, y, cell_val, w, h, believes, explo, item_found):
                 if cell_val in [0, 0.25, 0.3]:
                     believes[i, j] = 0
             elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
-                if cell_val in [0, 0.5, 0.6]:
+                if cell_val in [0]:
                     believes[i, j] = 0
-            else:
+            else: # If that cell is far away from the robot and the robot found none-zero values (Focus on the item close to robot)
                 if cell_val in [0.25, 0.3, 0.5, 0.6] and item_found == False:
                     believes[i, j] = 0
     return believes
+
+def update_known_values(x, y, w, h, found_item_type, found_cell_values):
+    for i in range(w): # For all columns in the map
+        for j in range(h): # For all cells in one column
+            if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
+                if found_item_type == 0:
+                    found_cell_values[i, j] = 0.5
+                elif found_item_type == 1:
+                    found_cell_values[i, j] = 0.6
+            elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
+                if found_item_type == 0:
+                    found_cell_values[i, j] = 0.25
+                elif found_item_type == 1:
+                    found_cell_values[i, j] = 0.3
+    found_cell_values[x, y] = 1
+    return found_cell_values
 
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
@@ -52,7 +68,11 @@ class Agent:
         self.next_move = None # Next move chosen by the choose_next_move method
         self.found_item_type = None # Type of the item that has just been found (0: key, 1: box)
         self.found_item_owner = None # Id of then owner of the item that has just been found
+        self.identified_item_flag = False # Flag raised in the msg_cb method to trigger a bloc in the explore_cell method
         self.found_item_flag = False # Flag raised in the explore_cell method to trigger get item owner in choose_move method
+        self.key_position = None # Coordinates of the robot's key
+        self.box_position = None # Coordinates of the robot's box
+        self.broadcast_message_flag = False # Flag raised to broadcast that an item has been found 
 
 
     def msg_cb(self): 
@@ -61,20 +81,50 @@ class Agent:
             msg = self.network.receive()
             print(msg)
             # Update values
-            if msg["sender"] == -1:
-                if msg["header"] == 2:
-                    self.x, self.y = msg["x"], msg["y"]   # Update agent position
-                    self.cell_val = msg["cell_val"] # Value of the cell the agent is located in
-                elif msg["header"] == 5:
+            if msg["sender"] == -1: # If the message is sent from the server
+                if msg["header"] == 2: # If the message has a MOVE header
+                    self.x, self.y = msg["x"], msg["y"]
+                    self.cell_val = msg["cell_val"]
+                
+                elif msg["header"] == 5: # If the message has a GET ITEM OWNER header
                     self.found_item_type = msg["type"]
-                    #self.found_item_owner = msg["owner"]
+                    self.found_item_owner = msg["owner"]
+                    self.identified_item_flag = True
+
+                    if self.found_item_owner == self.agent_id: # If the item belongs to this robot
+                        if self.found_item_type == 0: # If the item is a key
+                            self.key_position = (self.x, self.y)
+                        elif self.found_item_type == 1: # If the item is a box
+                            self.box_position = (self.x, self.y)
+                    
+                    else: # If the item belongs to another robot
+                        self.broadcast_message_flag = True
+            
+            elif msg["header"] == 0: # If the message is a BROADCAST message coming from another robot
+                if msg["Msg type"] in [1, 2]: # If the message says another robot found a key or a box
+                    # Updating known cell values to ignore this newly found item
+                    self.found_cell_values = update_known_values(msg["position"][0], msg["position"][1], self.w, self.h, msg["Msg type"]-1, self.found_cell_values)
+                    # Resetting believes in case the robot was trying to find this item
+                    self.believes = np.ones((self.w, self.h))
+                    for i in range(self.w): # For all columns in the map
+                        for j in range(self.h): # For all cells in one column
+                            # Ajusting new believes considering cell visited before finding the target
+                            if self.explo[i, j] == 1:
+                                self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, self.explo, True)
+
+                    if msg["owner"] == self.agent_id: # If the item belongs to this robot
+                        if msg["Msg type"] == 1: # If the item is a key
+                            self.key_position = msg["position"]
+                        if msg["Msg type"] == 2: # If the item is a box
+                            self.box_position = msg["position"]
 
 
 
     #TODO: CREATE YOUR METHODS HERE...
 
     def explore_cell(self):
-        self.cell_values[self.x, self.y] = self.cell_val
+        if self.cell_val != 0:
+            self.cell_values[self.x, self.y] = self.cell_val
 
         # Adjusting cell value if it corresponds to an item that has already been found
         if self.cell_val == self.found_cell_values[self.x, self.y]:
@@ -82,7 +132,7 @@ class Agent:
 
         # Verify if the robot found a new item
         if self.cell_val == 1:
-            if self.found_item_type is None: # If the item has not been identified yet
+            if self.identified_item_flag is False: # If the item has not been identified yet
                 self.found_item_flag = True
                 return # Exit the function to choose a move
             
@@ -93,20 +143,11 @@ class Agent:
                         # Ajusting new believes considering cell visited before finding the target
                         if self.explo[i, j] == 1:
                             self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, self.explo, True)
-                        # Keeping known map values in memory to ignore found items
-                        if self.x-1 <= i and i <= self.x+1 and self.y-1 <= j and j <= self.y+1: # If that cell is one cell away from the robot
-                            if self.found_item_type == 0:
-                                self.found_cell_values[i, j] = 0.5
-                            elif self.found_item_type == 1:
-                                self.found_cell_values[i, j] = 0.6
-                        elif self.x-2 <= i and i <= self.x+2 and self.y-2 <= j and j <= self.y+2: # If that cell is two cells away from the robot
-                            if self.found_item_type == 0:
-                                self.found_cell_values[i, j] = 0.25
-                            elif self.found_item_type == 1:
-                                self.found_cell_values[i, j] = 0.3
-                self.found_cell_values[self.x, self.y] = 1
+                
+                # Keeping known map values in memory to ignore found items
+                self.found_cell_values = update_known_values(self.x, self.y, self.w, self.h, self.found_item_type, self.found_cell_values)
                 self.cell_val = 0 # Adjusting cell value because item has been found
-                self.found_item_type = None # Reseting this variable to search for a new item
+                self.identified_item_flag = False # Searching for a new item to identify
 
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
@@ -114,11 +155,14 @@ class Agent:
         self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, self.explo, False)
 
 
-    def choose_next_move(self):
+    def choose_action(self):
         # Verify if an item has been found
         if self.found_item_flag is True:
             self.found_item_flag = False
-            self.next_move = (5, 0) # Get item owner (Ask the server for the type and the owner of the item)
+            self.next_move = {"header": GET_ITEM_OWNER} # Get item owner (Ask the server for the type and the owner of the item)
+        elif self.broadcast_message_flag is True:
+            self.broadcast_message_flag = False
+            self.next_move = {"header": BROADCAST_MSG, "Msg type": self.found_item_type+1, "position": (self.x, self.y), "owner": self.found_item_owner}
         else:
             # Create list of possible next cells
             possible_next_cells = []
@@ -146,34 +190,29 @@ class Agent:
             # Convert cell coordinates into move
             if chosen_next_cell[0] == self.x-1: # If next cell is on the left
                 if chosen_next_cell[1] == self.y-1: # If next cell is above
-                    self.next_move = (2,5) # UL
+                    self.next_move = {"header": MOVE, "direction": UP_LEFT}
                 elif chosen_next_cell[1] == self.y: # If next cell is on the same row
-                    self.next_move = (2,1) # Left
+                    self.next_move = {"header": MOVE, "direction": LEFT}
                 elif chosen_next_cell[1] == self.y+1: # If next cell is under
-                    self.next_move = (2,7) # DL
+                    self.next_move = {"header": MOVE, "direction": DOWN_LEFT}
             elif chosen_next_cell[0] == self.x: # If next cell is on the same column
                 if chosen_next_cell[1] == self.y-1: # If next cell is above
-                    self.next_move = (2,3) # Up
+                    self.next_move = {"header": MOVE, "direction": UP}
                 elif chosen_next_cell[1] == self.y: # If next cell is on the same row
-                    self.next_move = (2,0) # Stand
+                    self.next_move = {"header": MOVE, "direction": STAND}
                 elif chosen_next_cell[1] == self.y+1: # If next cell is under
-                    self.next_move = (2,4) # Down
+                    self.next_move = {"header": MOVE, "direction": DOWN}
             elif chosen_next_cell[0] == self.x+1: # If next cell is on the right
                 if chosen_next_cell[1] == self.y-1: # If next cell is above
-                    self.next_move = (2,6) # UR
+                    self.next_move = {"header": MOVE, "direction": UP_RIGHT}
                 elif chosen_next_cell[1] == self.y: # If next cell is on the same row
-                    self.next_move = (2,2) # Right
+                    self.next_move = {"header": MOVE, "direction": RIGHT}
                 elif chosen_next_cell[1] == self.y+1: # If next cell is under
-                    self.next_move = (2,8) # DR
-
-
-    def move(self):
-        if self.next_move:
-            if self.next_move[0] == 5:
-                self.network.send({"header": 5})
-            elif self.next_move[0] == 2:
-                self.network.send({"header": MOVE, "direction": self.next_move[1]})
+                    self.next_move = {"header": MOVE, "direction": DOWN_RIGHT}
         
+        # Execute chosen action
+        self.network.send(self.next_move)
+
 
     def plot_believes(self):
         plt.figure(self.agent_id+1, figsize=(6,6.5))
@@ -193,6 +232,8 @@ class Agent:
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
         # Add total number of visited cells
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
+        plt.annotate(f'Position of the key: {self.key_position}', xy=(0,-2), color='black', annotation_clip=False)
+        plt.annotate(f'Position of the box: {self.box_position}', xy=(0,-3), color='black', annotation_clip=False)
         plt.tight_layout() 
         plt.draw()
         plt.pause(0.2)
@@ -212,9 +253,8 @@ if __name__ == "__main__":
         while True:
             agent.explore_cell()
             agent.plot_believes()
-            agent.choose_next_move()
             time.sleep(1)
-            agent.move()
+            agent.choose_action()
             #cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
             #if cmds["header"] == BROADCAST_MSG:
             #    cmds["Msg type"] = int(input("1 <-> Key discovered\n2 <-> Box discovered\n3 <-> Completed\n"))
