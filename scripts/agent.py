@@ -14,12 +14,12 @@ import time
 from random import randint
 
 # Defining a function to update believes
-def update_believes(x, y, cell_val, w, h, believes, explo, item_found):
+def update_believes(x, y, cell_val, w, h, believes, item_found):
     # Updating believes for cells around the robot (1 or 2 cells away)
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
             if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
-                if cell_val in [0, 0.25, 0.3]:
+                if cell_val in [0, 0.25]: # Not 0.3 because the values of boxes are dominant over 0.25 and 0.5 of a key
                     believes[i, j] = 0
             elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
                 if cell_val in [0]:
@@ -33,15 +33,15 @@ def update_believes(x, y, cell_val, w, h, believes, explo, item_found):
 def update_known_values(x, y, w, h, found_item_type, found_cell_values):
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
-            if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
-                if found_item_type == 0:
+            if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the item
+                if found_item_type == 0 and found_cell_values[i, j] not in [0.3, 0.6, 1]: # Other condition to consider that box values are dominant
                     found_cell_values[i, j] = 0.5
-                elif found_item_type == 1:
+                elif found_item_type == 1 and found_cell_values[i, j] != 1: # Other condition if there is already another item there
                     found_cell_values[i, j] = 0.6
-            elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
-                if found_item_type == 0:
+            elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the item
+                if found_item_type == 0 and found_cell_values[i, j] not in [0.3, 0.5, 0.6, 1]: # Other condition to consider that box values are dominant
                     found_cell_values[i, j] = 0.25
-                elif found_item_type == 1:
+                elif found_item_type == 1 and found_cell_values[i, j] not in [0.6, 1]: # Other condition if there is already another item there
                     found_cell_values[i, j] = 0.3
     found_cell_values[x, y] = 1
     return found_cell_values
@@ -142,7 +142,7 @@ class Agent:
                         for j in range(self.h): # For all cells in one column
                             # Ajusting new believes considering cell visited before finding the target
                             if self.explo[i, j] == 1:
-                                self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, self.explo, True)
+                                self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, True)
 
                     if msg["owner"] == self.agent_id: # If the item belongs to this robot
                         if msg["Msg type"] == 1: # If the item is a key
@@ -181,7 +181,7 @@ class Agent:
                     for j in range(self.h): # For all cells in one column
                         # Ajusting new believes considering cell visited before finding the target
                         if self.explo[i, j] == 1:
-                            self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, self.explo, True)
+                            self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, True)
                 
                 # Keeping known map values in memory to ignore found items
                 self.found_cell_values = update_known_values(self.x, self.y, self.w, self.h, self.found_item_type, self.found_cell_values)
@@ -191,7 +191,7 @@ class Agent:
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
         # Updating believes for cells around the robot (0 to 2 cells away)
-        self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, self.explo, False)
+        self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, False)
 
 
     def choose_action(self):
