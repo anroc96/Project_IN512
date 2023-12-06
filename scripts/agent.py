@@ -29,6 +29,7 @@ def update_believes(x, y, cell_val, w, h, believes, explo, item_found):
                     believes[i, j] = 0
     return believes
 
+# Defining a function to update known cell values
 def update_known_values(x, y, w, h, found_item_type, found_cell_values):
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
@@ -44,6 +45,32 @@ def update_known_values(x, y, w, h, found_item_type, found_cell_values):
                     found_cell_values[i, j] = 0.3
     found_cell_values[x, y] = 1
     return found_cell_values
+
+# Defining a function to convert a cell coordinate into a move
+def cell_to_move(x, y, chosen_next_cell):
+    if chosen_next_cell[0] == x-1: # If next cell is on the left
+        if chosen_next_cell[1] == y-1: # If next cell is above
+            next_move = {"header": MOVE, "direction": UP_LEFT}
+        elif chosen_next_cell[1] == y: # If next cell is on the same row
+            next_move = {"header": MOVE, "direction": LEFT}
+        elif chosen_next_cell[1] == y+1: # If next cell is under
+            next_move = {"header": MOVE, "direction": DOWN_LEFT}
+    elif chosen_next_cell[0] == x: # If next cell is on the same column
+        if chosen_next_cell[1] == y-1: # If next cell is above
+            next_move = {"header": MOVE, "direction": UP}
+        elif chosen_next_cell[1] == y: # If next cell is on the same row
+            next_move = {"header": MOVE, "direction": STAND}
+        elif chosen_next_cell[1] == y+1: # If next cell is under
+            next_move = {"header": MOVE, "direction": DOWN}
+    elif chosen_next_cell[0] == x+1: # If next cell is on the right
+        if chosen_next_cell[1] == y-1: # If next cell is above
+            next_move = {"header": MOVE, "direction": UP_RIGHT}
+        elif chosen_next_cell[1] == y: # If next cell is on the same row
+            next_move = {"header": MOVE, "direction": RIGHT}
+        elif chosen_next_cell[1] == y+1: # If next cell is under
+            next_move = {"header": MOVE, "direction": DOWN_RIGHT}
+    return next_move
+
 
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
@@ -68,11 +95,13 @@ class Agent:
         self.next_move = None # Next move chosen by the choose_next_move method
         self.found_item_type = None # Type of the item that has just been found (0: key, 1: box)
         self.found_item_owner = None # Id of then owner of the item that has just been found
-        self.identified_item_flag = False # Flag raised in the msg_cb method to trigger a bloc in the explore_cell method
         self.found_item_flag = False # Flag raised in the explore_cell method to trigger get item owner in choose_move method
+        self.identified_item_flag = False # Flag raised in the msg_cb method to trigger a bloc in the explore_cell method
+        self.broadcast_message_flag = False # Flag raised to broadcast that an item has been found 
         self.key_position = None # Coordinates of the robot's key
         self.box_position = None # Coordinates of the robot's box
-        self.broadcast_message_flag = False # Flag raised to broadcast that an item has been found 
+        self.key_collected = False # Flag to tell if the key has been collected by the robot
+        self.box_reached = False # Flag to tell if the box has been reached with the key
 
 
     def msg_cb(self): 
@@ -94,8 +123,11 @@ class Agent:
                     if self.found_item_owner == self.agent_id: # If the item belongs to this robot
                         if self.found_item_type == 0: # If the item is a key
                             self.key_position = (self.x, self.y)
+                            self.key_collected = True
                         elif self.found_item_type == 1: # If the item is a box
                             self.box_position = (self.x, self.y)
+                            if self.key_collected is True:
+                                self.box_reached = True
                     
                     else: # If the item belongs to another robot
                         self.broadcast_message_flag = True
@@ -123,6 +155,13 @@ class Agent:
     #TODO: CREATE YOUR METHODS HERE...
 
     def explore_cell(self):
+        # Verify if the robot is collecting the key or reaching the box with the key
+        if (self.x, self.y) == self.key_position:
+            self.key_collected = True
+        elif (self.x, self.y) == self.box_position and self.key_collected is True:
+            self.box_reached = True
+
+        # Updating cell_values
         if self.cell_val != 0:
             self.cell_values[self.x, self.y] = self.cell_val
 
@@ -160,9 +199,51 @@ class Agent:
         if self.found_item_flag is True:
             self.found_item_flag = False
             self.next_move = {"header": GET_ITEM_OWNER} # Get item owner (Ask the server for the type and the owner of the item)
+
+        # Verify if a message must be broadcasted
         elif self.broadcast_message_flag is True:
             self.broadcast_message_flag = False
             self.next_move = {"header": BROADCAST_MSG, "Msg type": self.found_item_type+1, "position": (self.x, self.y), "owner": self.found_item_owner}
+
+        # Go collect the key if it is another robot that found it first
+        elif self.key_position is not None and self.key_collected is False:
+            # Create list of possible next cells
+            possible_next_cells = []
+            for i in range(self.x-1, self.x+2): # For colums maximum one cell away
+                for j in range(self.y-1, self.y+2): # For rows maximum one cell away
+                    if i in range(self.w) and j in range(self.h) and (i, j): # If the indexes are inside the map
+                        distance = np.linalg.norm([self.key_position[0]-i, self.key_position[1]-j]) # Calculate the distance to the key
+                        possible_next_cells.append([i, j, distance])
+            # Find best possible next cells based on the distance to the key
+            possible_next_cells = np.array(possible_next_cells)
+            [_, _, min_distance] = np.amin(possible_next_cells, axis = 0)
+            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == min_distance))]
+            # Randomly choose a cell among the best possible cells
+            idx = randint(0,len(best_next_cells)-1)
+            chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
+            # Convert cell coordinates into move
+            self.next_move = cell_to_move(self.x, self.y, chosen_next_cell)
+
+        # Go to the box if the key is collected and the position of the box is known
+        elif self.box_position is not None and self.key_collected is True:
+            # Create list of possible next cells
+            possible_next_cells = []
+            for i in range(self.x-1, self.x+2): # For colums maximum one cell away
+                for j in range(self.y-1, self.y+2): # For rows maximum one cell away
+                    if i in range(self.w) and j in range(self.h) and (i, j): # If the indexes are inside the map
+                        distance = np.linalg.norm([self.box_position[0]-i, self.box_position[1]-j]) # Calculate the distance to the box
+                        possible_next_cells.append([i, j, distance])
+            # Find best possible next cells based on the distance to the box
+            possible_next_cells = np.array(possible_next_cells)
+            [_, _, min_distance] = np.amin(possible_next_cells, axis = 0)
+            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == min_distance))]
+            # Randomly choose a cell among the best possible cells
+            idx = randint(0,len(best_next_cells)-1)
+            chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
+            # Convert cell coordinates into move
+            self.next_move = cell_to_move(self.x, self.y, chosen_next_cell)
+        
+        # Find the best next move to explore the map
         else:
             # Create list of possible next cells
             possible_next_cells = []
@@ -178,7 +259,6 @@ class Agent:
                                     weighted_sum += 1/(distance+0.0000001) # Greater weight for closer cells
                         # Append the list of possible next cells with cell belief and nb visited cell as criterions
                         possible_next_cells.append([i, j, weighted_sum])
-            
             # Find best possible next cells based on the weighted sum of cells with belief of 1
             possible_next_cells = np.array(possible_next_cells)
             [_, _, max_weighted_sum] = np.amax(possible_next_cells, axis = 0)
@@ -186,29 +266,8 @@ class Agent:
             # Randomly choose a cell among the best possible cells
             idx = randint(0,len(best_next_cells)-1)
             chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
-
             # Convert cell coordinates into move
-            if chosen_next_cell[0] == self.x-1: # If next cell is on the left
-                if chosen_next_cell[1] == self.y-1: # If next cell is above
-                    self.next_move = {"header": MOVE, "direction": UP_LEFT}
-                elif chosen_next_cell[1] == self.y: # If next cell is on the same row
-                    self.next_move = {"header": MOVE, "direction": LEFT}
-                elif chosen_next_cell[1] == self.y+1: # If next cell is under
-                    self.next_move = {"header": MOVE, "direction": DOWN_LEFT}
-            elif chosen_next_cell[0] == self.x: # If next cell is on the same column
-                if chosen_next_cell[1] == self.y-1: # If next cell is above
-                    self.next_move = {"header": MOVE, "direction": UP}
-                elif chosen_next_cell[1] == self.y: # If next cell is on the same row
-                    self.next_move = {"header": MOVE, "direction": STAND}
-                elif chosen_next_cell[1] == self.y+1: # If next cell is under
-                    self.next_move = {"header": MOVE, "direction": DOWN}
-            elif chosen_next_cell[0] == self.x+1: # If next cell is on the right
-                if chosen_next_cell[1] == self.y-1: # If next cell is above
-                    self.next_move = {"header": MOVE, "direction": UP_RIGHT}
-                elif chosen_next_cell[1] == self.y: # If next cell is on the same row
-                    self.next_move = {"header": MOVE, "direction": RIGHT}
-                elif chosen_next_cell[1] == self.y+1: # If next cell is under
-                    self.next_move = {"header": MOVE, "direction": DOWN_RIGHT}
+            self.next_move = cell_to_move(self.x, self.y, chosen_next_cell)
         
         # Execute chosen action
         self.network.send(self.next_move)
@@ -232,8 +291,8 @@ class Agent:
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
         # Add total number of visited cells
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
-        plt.annotate(f'Position of the key: {self.key_position}', xy=(0,-2), color='black', annotation_clip=False)
-        plt.annotate(f'Position of the box: {self.box_position}', xy=(0,-3), color='black', annotation_clip=False)
+        plt.annotate(f'Position of the key: {self.key_position} Key collected: {self.key_collected}', xy=(0,-2), color='black', annotation_clip=False)
+        plt.annotate(f'Position of the box: {self.box_position} Box reached with key: {self.box_reached}', xy=(0,-3), color='black', annotation_clip=False)
         plt.tight_layout() 
         plt.draw()
         plt.pause(0.2)
