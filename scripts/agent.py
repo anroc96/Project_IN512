@@ -283,16 +283,18 @@ class Agent:
         # Creating array with cell values in visited cells and believes elsewhere
         cellval_or_belief = np.maximum(self.believes, self.cell_values)
         # Adding believes as annotations on every cell
-        for i in range(self.h):
-            for j in range(self.w):
+        for i in range(self.w):
+            for j in range(self.h):
                 plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
         plt.axis('equal')
         plt.axis('off')
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
         # Add total number of visited cells
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
-        plt.annotate(f'Position of the key: {self.key_position} Key collected: {self.key_collected}', xy=(0,-2), color='black', annotation_clip=False)
-        plt.annotate(f'Position of the box: {self.box_position} Box reached with key: {self.box_reached}', xy=(0,-3), color='black', annotation_clip=False)
+        plt.annotate(f'Position of the key: {self.key_position}', xy=(0,-2), color='black', annotation_clip=False)
+        plt.annotate(f'Position of the box: {self.box_position}', xy=(0,-3), color='black', annotation_clip=False)
+        plt.annotate(f'Key collected: {self.key_collected}', xy=(0,-4), color='black', annotation_clip=False)
+        plt.annotate(f'Box reached with key: {self.box_reached}', xy=(0,-5), color='black', annotation_clip=False)
         plt.tight_layout() 
         plt.draw()
         plt.pause(0.2)
