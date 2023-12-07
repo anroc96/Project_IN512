@@ -197,8 +197,12 @@ class Agent:
 
 
     def choose_action(self):
+        # Verify if the robot's quest is completed
+        if self.box_reached is True:
+            self.next_move = {"header": BROADCAST_MSG, "Msg type": COMPLETED, "position": (self.x, self.y), "owner": self.agent_id} # Broadcast that the quest is completed
+
         # Verify if an item has been found
-        if self.found_item_flag is True:
+        elif self.found_item_flag is True:
             self.found_item_flag = False
             self.next_move = {"header": GET_ITEM_OWNER} # Get item owner (Ask the server for the type and the owner of the item)
 
