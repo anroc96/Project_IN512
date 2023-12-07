@@ -15,6 +15,8 @@ from random import randint
 
 # Defining a function to update believes
 def update_believes(x, y, cell_val, w, h, believes, item_found):
+    # Updating belief for current cell
+    believes[x, y] = 0
     # Updating believes for cells around the robot (1 or 2 cells away)
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
@@ -129,8 +131,8 @@ class Agent:
                             if self.key_collected is True:
                                 self.box_reached = True
                     
-                    else: # If the item belongs to another robot
-                        self.broadcast_message_flag = True
+                    # Tell the other robots about this item
+                    self.broadcast_message_flag = True
             
             elif msg["header"] == 0: # If the message is a BROADCAST message coming from another robot
                 if msg["Msg type"] in [1, 2]: # If the message says another robot found a key or a box
@@ -255,7 +257,7 @@ class Agent:
                         for ii in range(self.w): # For colums maximum two cells away
                             for jj in range(self.h): # For rows maximum two cells away
                                 if self.believes[ii, jj] == 1: # If that cell has a belief of 1
-                                    distance = np.linalg.norm([ii-i, jj-j]) # Calculate the distance between these cells
+                                    distance = (ii-i)**2 + (jj-j)**2 # Calculate the squared distance between these cells
                                     weighted_sum += 1/(distance+0.0000001) # Greater weight for closer cells
                         # Append the list of possible next cells with cell belief and nb visited cell as criterions
                         possible_next_cells.append([i, j, weighted_sum])
