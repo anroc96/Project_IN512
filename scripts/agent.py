@@ -17,14 +17,18 @@ from random import randint
 def update_believes(x, y, cell_val, w, h, believes, item_found):
     # Updating belief for current cell
     believes[x, y] = 0
-    # Updating believes for cells around the robot (1 or 2 cells away)
+    # Updating believes for cells around the robot
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
             if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
-                if cell_val in [0, 0.25]: # Not 0.3 because the values of boxes are dominant over 0.25 and 0.5 of a key
+                if cell_val in [0, 0.25]: # No item can be one cell away for these cell values
+                    believes[i, j] = 0
+                elif cell_val in [0.3] and item_found == False: # Not when reupdating for 0.3 because box values are dominant over 0.25 and 0.5
                     believes[i, j] = 0
             elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
-                if cell_val in [0]:
+                if cell_val in [0]: # No item can be two cells away for this cell value
+                    believes[i, j] = 0
+                elif cell_val in [0.5, 0.6] and item_found == False: # If a new item is found, focus on it
                     believes[i, j] = 0
             else: # If that cell is far away from the robot and the robot found none-zero values (Focus on the item close to robot)
                 if cell_val in [0.25, 0.3, 0.5, 0.6] and item_found == False:
@@ -164,15 +168,15 @@ class Agent:
             self.box_reached = True
 
         # Updating cell_values
-        if self.cell_val != 0:
-            self.cell_values[self.x, self.y] = self.cell_val
+        self.cell_values[self.x, self.y] = self.cell_val
 
         # Adjusting cell value if it corresponds to an item that has already been found
-        if self.cell_val == self.found_cell_values[self.x, self.y]:
-            self.cell_val = 0
+        known_cell_val = False # Flag to ignore a cell value if it corresponds to an already found item
+        if self.cell_val == self.found_cell_values[self.x, self.y] and self.cell_val != 0:
+            known_cell_val = True
 
         # Verify if the robot found a new item
-        if self.cell_val == 1:
+        if self.cell_val == 1 and known_cell_val == False:
             if self.identified_item_flag is False: # If the item has not been identified yet
                 self.found_item_flag = True
                 return # Exit the function to choose a move
@@ -187,13 +191,12 @@ class Agent:
                 
                 # Keeping known map values in memory to ignore found items
                 self.found_cell_values = update_known_values(self.x, self.y, self.w, self.h, self.found_item_type, self.found_cell_values)
-                self.cell_val = 0 # Adjusting cell value because item has been found
                 self.identified_item_flag = False # Searching for a new item to identify
 
         # Marking the cell as explored
         self.explo[self.x, self.y] = 1 
         # Updating believes for cells around the robot (0 to 2 cells away)
-        self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, False)
+        self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, known_cell_val)
 
 
     def choose_action(self):
