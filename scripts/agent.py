@@ -11,22 +11,21 @@ from threading import Thread
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from random import randint
 
 # Defining a function to update believes
 def update_believes(x, y, cell_val, w, h, believes, item_found):
-    # Updating belief for current cell
+    # Updating belief for the current cell
     believes[x, y] = 0
-    # Updating believes for cells around the robot
+    # Updating believes for other cells in map
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
             if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the robot
-                if cell_val in [0, 0.25]: # No item can be one cell away for these cell values
+                if cell_val in [0, 0.25]: # No item can be one cell away of these cell values
                     believes[i, j] = 0
                 elif cell_val in [0.3] and item_found == False: # Not when reupdating for 0.3 because box values are dominant over 0.25 and 0.5
                     believes[i, j] = 0
             elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the robot
-                if cell_val in [0]: # No item can be two cells away for this cell value
+                if cell_val in [0]: # No item can be two cells away of this cell value
                     believes[i, j] = 0
                 elif cell_val in [0.5, 0.6] and item_found == False: # If a new item is found, focus on it
                     believes[i, j] = 0
@@ -40,17 +39,30 @@ def update_known_values(x, y, w, h, found_item_type, found_cell_values):
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
             if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the item
-                if found_item_type == 0 and found_cell_values[i, j] not in [0.3, 0.6, 1]: # Other condition to consider that box values are dominant
+                if found_item_type == KEY_TYPE and found_cell_values[i, j] not in [0.3, 0.6, 1]: # Box values are dominant
                     found_cell_values[i, j] = 0.5
-                elif found_item_type == 1 and found_cell_values[i, j] != 1: # Other condition if there is already another item there
+                elif found_item_type == BOX_TYPE and found_cell_values[i, j] not in [1]: # 1 is dominant
                     found_cell_values[i, j] = 0.6
             elif x-2 <= i and i <= x+2 and y-2 <= j and j <= y+2: # If that cell is two cells away from the item
-                if found_item_type == 0 and found_cell_values[i, j] not in [0.3, 0.5, 0.6, 1]: # Other condition to consider that box values are dominant
+                if found_item_type == KEY_TYPE and found_cell_values[i, j] not in [0.3, 0.5, 0.6, 1]: # These values are dominant
                     found_cell_values[i, j] = 0.25
-                elif found_item_type == 1 and found_cell_values[i, j] not in [0.6, 1]: # Other condition if there is already another item there
+                elif found_item_type == BOX_TYPE and found_cell_values[i, j] not in [0.6, 1]: # These values are dominant
                     found_cell_values[i, j] = 0.3
     found_cell_values[x, y] = 1
     return found_cell_values
+
+# Defining a function to reset+update believes and update found_cell_values when a new item is found
+def new_item_update(x, y, w, h, found_item_type, believes, explo, cell_values, found_cell_values):
+    # Updating known cell values to ignore this newly found item
+    found_cell_values = update_known_values(x, y, w, h, found_item_type, found_cell_values)
+    # Resetting believes to serch for a new item
+    believes = np.ones((w, h))
+    for i in range(w): # For all columns in the map
+        for j in range(h): # For all cells in one column
+            # Ajusting new believes considering cell visited before finding the target
+            if explo[i, j] == 1:
+                believes = update_believes(i, j, cell_values[i, j], w, h, believes, True)
+    return believes, found_cell_values
 
 # Defining a function to convert a cell coordinate into a move
 def cell_to_move(x, y, chosen_next_cell):
@@ -77,6 +89,19 @@ def cell_to_move(x, y, chosen_next_cell):
             next_move = {"header": MOVE, "direction": DOWN_RIGHT}
     return next_move
 
+# Defining a function to choose the best next move to go towards a certain cell
+def go_towards_cell(x, y, w, h, target_position):
+    max_distance = np.linalg.norm([w, h])
+    for i in range(x-1, x+2): # For colums maximum one cell away
+        for j in range(y-1, y+2): # For rows maximum one cell away
+            if i in range(w) and j in range(h): # If the indexes are inside the map
+                distance = np.linalg.norm([target_position[0]-i, target_position[1]-j]) # Calculate the distance to the key
+                if distance < max_distance:
+                    chosen_next_cell = (i, j)
+                    max_distance = distance
+    # Convert cell coordinates into move
+    return cell_to_move(x, y, chosen_next_cell)
+
 
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
@@ -93,21 +118,20 @@ class Agent:
         self.cell_val = env_conf["cell_val"] #value of the cell the agent is located in
         Thread(target=self.msg_cb, daemon=True).start()
 
-        #TODO: DEFINE YOUR ATTRIBUTES HERE
         self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
-        self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (values from 0 to 1)
-        self.cell_values = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of visited cell values
+        self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (0: no item can be there, 1: it is possible that there is an item)
+        # Note: If the agent finds a new non zero value, it will focus on this item and put zeros everywhere far from its location even if there may be \
+        # other items there. It will remove these "false zeros" after it found the item it was looking for.
+        self.cell_values = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of visited cell values to display on the map and to reupdate believes
         self.found_cell_values = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of known cell values to ignore already found items
-        self.next_move = None # Next move chosen by the choose_next_move method
         self.found_item_type = None # Type of the item that has just been found (0: key, 1: box)
-        self.found_item_owner = None # Id of then owner of the item that has just been found
-        self.found_item_flag = False # Flag raised in the explore_cell method to trigger get item owner in choose_move method
-        self.identified_item_flag = False # Flag raised in the msg_cb method to trigger a bloc in the explore_cell method
-        self.broadcast_message_flag = False # Flag raised to broadcast that an item has been found 
+        self.found_item_owner = None # Id of the owner of the item that has just been found
+        self.found_item_flag = False # Flag raised in the explore_cell method to trigger get item owner in choose_action method
+        self.broadcast_message_flag = False # Flag raised in msg_cb method to trigger broadcast in choose_action method
         self.key_position = None # Coordinates of the robot's key
         self.box_position = None # Coordinates of the robot's box
         self.key_collected = False # Flag to tell if the key has been collected by the robot
-        self.box_reached = False # Flag to tell if the box has been reached with the key
+        self.box_reached = False # Flag to tell if the box has been reached with the key and that the quest is completed
 
 
     def msg_cb(self): 
@@ -115,50 +139,42 @@ class Agent:
         while self.running:
             msg = self.network.receive()
             print(msg)
-            # Update values
-            if msg["sender"] == -1: # If the message is sent from the server
-                if msg["header"] == 2: # If the message has a MOVE header
-                    self.x, self.y = msg["x"], msg["y"]
-                    self.cell_val = msg["cell_val"]
-                
-                elif msg["header"] == 5: # If the message has a GET ITEM OWNER header
-                    self.found_item_type = msg["type"]
-                    self.found_item_owner = msg["owner"]
-                    self.identified_item_flag = True
 
-                    if self.found_item_owner == self.agent_id: # If the item belongs to this robot
-                        if self.found_item_type == 0: # If the item is a key
-                            self.key_position = (self.x, self.y)
-                            self.key_collected = True
-                        elif self.found_item_type == 1: # If the item is a box
-                            self.box_position = (self.x, self.y)
-                            if self.key_collected is True:
-                                self.box_reached = True
-                    
-                    # Tell the other robots about this item
-                    self.broadcast_message_flag = True
+            if msg["header"] == MOVE:
+                # Update variables
+                self.x, self.y = msg["x"], msg["y"]
+                self.cell_val = msg["cell_val"]
             
-            elif msg["header"] == 0: # If the message is a BROADCAST message coming from another robot
-                if msg["Msg type"] in [1, 2]: # If the message says another robot found a key or a box
-                    # Updating known cell values to ignore this newly found item
-                    self.found_cell_values = update_known_values(msg["position"][0], msg["position"][1], self.w, self.h, msg["Msg type"]-1, self.found_cell_values)
-                    # Resetting believes in case the robot was trying to find this item
-                    self.believes = np.ones((self.w, self.h))
-                    for i in range(self.w): # For all columns in the map
-                        for j in range(self.h): # For all cells in one column
-                            # Ajusting new believes considering cell visited before finding the target
-                            if self.explo[i, j] == 1:
-                                self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, True)
+            elif msg["header"] == GET_ITEM_OWNER:
+                # The robot found a new item
+                self.found_item_type = msg["type"]
+                self.found_item_owner = msg["owner"]
+                # Updating believes and found_cell_values
+                self.believes, self.found_cell_values = new_item_update(self.x, self.y, self.w, self.h, self.found_item_type, self.believes,
+                                                                        self.explo, self.cell_values, self.found_cell_values)
+                # Checking if the item belongs to this robot
+                if self.found_item_owner == self.agent_id:
+                    if self.found_item_type == KEY_TYPE:
+                        self.key_position = (self.x, self.y)
+                        self.key_collected = True
+                    elif self.found_item_type == BOX_TYPE:
+                        self.box_position = (self.x, self.y)
+                        if self.key_collected is True:
+                            self.box_reached = True
+                # Tell the other robots about this item
+                self.broadcast_message_flag = True
+            
+            elif msg["header"] == BROADCAST_MSG and msg["Msg type"] in [KEY_DISCOVERED, BOX_DISCOVERED]: # If another robot found an item
+                # Updating believes and found_cell_values
+                self.believes, self.found_cell_values = new_item_update(msg["position"][0], msg["position"][1], self.w, self.h, msg["Msg type"]-1, self.believes,
+                                                                        self.explo, self.cell_values, self.found_cell_values)
+                # Checking if the item belongs to this robot
+                if msg["owner"] == self.agent_id:
+                    if msg["Msg type"] == KEY_DISCOVERED:
+                        self.key_position = msg["position"]
+                    if msg["Msg type"] == BOX_DISCOVERED:
+                        self.box_position = msg["position"]
 
-                    if msg["owner"] == self.agent_id: # If the item belongs to this robot
-                        if msg["Msg type"] == 1: # If the item is a key
-                            self.key_position = msg["position"]
-                        if msg["Msg type"] == 2: # If the item is a box
-                            self.box_position = msg["position"]
-
-
-
-    #TODO: CREATE YOUR METHODS HERE...
 
     def explore_cell(self):
         # Verify if the robot is collecting the key or reaching the box with the key
@@ -170,143 +186,103 @@ class Agent:
         # Updating cell_values
         self.cell_values[self.x, self.y] = self.cell_val
 
-        # Adjusting cell value if it corresponds to an item that has already been found
-        known_cell_val = False # Flag to ignore a cell value if it corresponds to an already found item
+        # Creating a flag to ignore a cell value if it corresponds to an already found item
+        known_cell_val = False 
         if self.cell_val == self.found_cell_values[self.x, self.y] and self.cell_val != 0:
             known_cell_val = True
 
         # Verify if the robot found a new item
         if self.cell_val == 1 and known_cell_val == False:
-            if self.identified_item_flag is False: # If the item has not been identified yet
-                self.found_item_flag = True
-                return # Exit the function to choose a move
-            
-            else: # If the item found has been identified
-                self.believes = np.ones((self.w, self.h)) # Resetting believes to search for a new item
-                for i in range(self.w): # For all columns in the map
-                    for j in range(self.h): # For all cells in one column
-                        # Ajusting new believes considering cell visited before finding the target
-                        if self.explo[i, j] == 1:
-                            self.believes = update_believes(i, j, self.cell_values[i, j], self.w, self.h, self.believes, True)
-                
-                # Keeping known map values in memory to ignore found items
-                self.found_cell_values = update_known_values(self.x, self.y, self.w, self.h, self.found_item_type, self.found_cell_values)
-                self.identified_item_flag = False # Searching for a new item to identify
+            self.found_item_flag = True
+            return # Exit the function to choose a move and ask the server for the item type and owner
 
         # Marking the cell as explored
-        self.explo[self.x, self.y] = 1 
-        # Updating believes for cells around the robot (0 to 2 cells away)
+        self.explo[self.x, self.y] = 1
+
+        # Updating believes
         self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, known_cell_val)
 
 
     def choose_action(self):
         # Verify if the robot's quest is completed
         if self.box_reached is True:
-            self.next_move = {"header": BROADCAST_MSG, "Msg type": COMPLETED, "position": (self.x, self.y), "owner": self.agent_id} # Broadcast that the quest is completed
+            next_move = {"header": BROADCAST_MSG, "Msg type": COMPLETED, "position": (self.x, self.y), "owner": self.agent_id} # Broadcast that the quest is completed
 
         # Verify if an item has been found
         elif self.found_item_flag is True:
             self.found_item_flag = False
-            self.next_move = {"header": GET_ITEM_OWNER} # Get item owner (Ask the server for the type and the owner of the item)
+            next_move = {"header": GET_ITEM_OWNER} # Get item owner (Ask the server for the type and the owner of the item)
 
         # Verify if a message must be broadcasted
         elif self.broadcast_message_flag is True:
             self.broadcast_message_flag = False
-            self.next_move = {"header": BROADCAST_MSG, "Msg type": self.found_item_type+1, "position": (self.x, self.y), "owner": self.found_item_owner}
+            next_move = {"header": BROADCAST_MSG, "Msg type": self.found_item_type+1, "position": (self.x, self.y), "owner": self.found_item_owner}
 
         # Go collect the key if it is another robot that found it first
         elif self.key_position is not None and self.key_collected is False:
-            # Create list of possible next cells
-            possible_next_cells = []
-            for i in range(self.x-1, self.x+2): # For colums maximum one cell away
-                for j in range(self.y-1, self.y+2): # For rows maximum one cell away
-                    if i in range(self.w) and j in range(self.h) and (i, j): # If the indexes are inside the map
-                        distance = np.linalg.norm([self.key_position[0]-i, self.key_position[1]-j]) # Calculate the distance to the key
-                        possible_next_cells.append([i, j, distance])
-            # Find best possible next cells based on the distance to the key
-            possible_next_cells = np.array(possible_next_cells)
-            [_, _, min_distance] = np.amin(possible_next_cells, axis = 0)
-            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == min_distance))]
-            # Randomly choose a cell among the best possible cells
-            idx = randint(0,len(best_next_cells)-1)
-            chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
-            # Convert cell coordinates into move
-            self.next_move = cell_to_move(self.x, self.y, chosen_next_cell)
+            next_move = go_towards_cell(self.x, self.y, self.w, self.h, self.key_position)
 
         # Go to the box if the key is collected and the position of the box is known
         elif self.box_position is not None and self.key_collected is True:
-            # Create list of possible next cells
-            possible_next_cells = []
-            for i in range(self.x-1, self.x+2): # For colums maximum one cell away
-                for j in range(self.y-1, self.y+2): # For rows maximum one cell away
-                    if i in range(self.w) and j in range(self.h) and (i, j): # If the indexes are inside the map
-                        distance = np.linalg.norm([self.box_position[0]-i, self.box_position[1]-j]) # Calculate the distance to the box
-                        possible_next_cells.append([i, j, distance])
-            # Find best possible next cells based on the distance to the box
-            possible_next_cells = np.array(possible_next_cells)
-            [_, _, min_distance] = np.amin(possible_next_cells, axis = 0)
-            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == min_distance))]
-            # Randomly choose a cell among the best possible cells
-            idx = randint(0,len(best_next_cells)-1)
-            chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
-            # Convert cell coordinates into move
-            self.next_move = cell_to_move(self.x, self.y, chosen_next_cell)
+            next_move = go_towards_cell(self.x, self.y, self.w, self.h, self.box_position)
         
         # Find the best next move to explore the map
         else:
-            # Create list of possible next cells
-            possible_next_cells = []
+            max_weighted_sum = 0
             for i in range(self.x-1, self.x+2): # For colums maximum one cell away
                 for j in range(self.y-1, self.y+2): # For rows maximum one cell away
                     if i in range(self.w) and j in range(self.h) and (i, j) != (self.x, self.y): # If the indexes are inside the map and the cell is not the current cell
-                        # Count number of cells with a belief of 1 around that cell (sum of 1/distances)
+                        # Count number of cells with a belief of 1 around that cell (sum of 1/distances^2)
                         weighted_sum = 0 
-                        for ii in range(self.w): # For colums maximum two cells away
-                            for jj in range(self.h): # For rows maximum two cells away
+                        for ii in range(self.w): # For all columns in the map
+                            for jj in range(self.h): # For all cells in this column
                                 if self.believes[ii, jj] == 1: # If that cell has a belief of 1
-                                    distance = (ii-i)**2 + (jj-j)**2 # Calculate the squared distance between these cells
-                                    weighted_sum += 1/(distance+0.0000001) # Greater weight for closer cells
-                        # Append the list of possible next cells with cell belief and nb visited cell as criterions
-                        possible_next_cells.append([i, j, weighted_sum])
-            # Find best possible next cells based on the weighted sum of cells with belief of 1
-            possible_next_cells = np.array(possible_next_cells)
-            [_, _, max_weighted_sum] = np.amax(possible_next_cells, axis = 0)
-            best_next_cells = possible_next_cells[np.where((possible_next_cells[:,2] == max_weighted_sum))]
-            # Randomly choose a cell among the best possible cells
-            idx = randint(0,len(best_next_cells)-1)
-            chosen_next_cell = (int(best_next_cells[idx][0]), int(best_next_cells[idx][1]))
+                                    distance2 = (ii-i)**2 + (jj-j)**2 # Calculate the squared distance between these cells
+                                    weighted_sum += 1/(distance2+0.0000001) # Greater weight for closer cells
+                        if weighted_sum > max_weighted_sum:
+                            chosen_next_cell = (i, j)
+                            max_weighted_sum = weighted_sum
             # Convert cell coordinates into move
-            self.next_move = cell_to_move(self.x, self.y, chosen_next_cell)
+            next_move = cell_to_move(self.x, self.y, chosen_next_cell)
         
         # Execute chosen action
-        self.network.send(self.next_move)
+        self.network.send(next_move)
 
 
     def plot_believes(self):
-        plt.figure(self.agent_id+1, figsize=(6,6.5))
-        plt.clf()   # Clear the matplotlib plot every time the robot moves
+        # Enable interactive mode to continue execution of the code after the plot is shown
+        # Note: The "block" parameter on the "plt.show()" function doesn't seem to work on macOS.
         plt.ion()
-        plt.show()
-        # Creating colormap with explored cells
-        plt.pcolormesh(np.flip(self.explo.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
+
+        plt.figure(self.agent_id+1, figsize=(6,6.5))
+        plt.clf() # Clear the matplotlib plot every time the robot moves
+
+        # Creating colormap with explored cells and the agent's position
+        colormap = np.copy(self.explo)
+        colormap[self.x, self.y] = 2
+        plt.pcolormesh(np.flip(colormap.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
+
         # Creating array with cell values in visited cells and believes elsewhere
         cellval_or_belief = np.maximum(self.believes, self.cell_values)
-        # Adding believes as annotations on every cell
+
+        # Adding cell values or believes as annotations on every cell
         for i in range(self.w):
             for j in range(self.h):
                 plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
-        plt.axis('equal')
-        plt.axis('off')
-        plt.title(f'GridBelieves for robot {self.agent_id+1}')
-        # Add total number of visited cells
+        
+        # Add total number of visited cells and other important information
         plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
         plt.annotate(f'Position of the key: {self.key_position}', xy=(0,-2), color='black', annotation_clip=False)
         plt.annotate(f'Position of the box: {self.box_position}', xy=(0,-3), color='black', annotation_clip=False)
         plt.annotate(f'Key collected: {self.key_collected}', xy=(0,-4), color='black', annotation_clip=False)
         plt.annotate(f'Box reached with key: {self.box_reached}', xy=(0,-5), color='black', annotation_clip=False)
-        plt.tight_layout() 
+
+        plt.axis('equal')
+        plt.axis('off')
+        plt.title(f'GridBelieves for robot {self.agent_id+1}')
+        plt.tight_layout() # Reduce margins
         plt.draw()
-        plt.pause(0.2)
+        plt.pause(0.2) # Necessary for the plot to appear on macOS
 
 
 
@@ -337,7 +313,3 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         pass
-
-
-
-
