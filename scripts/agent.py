@@ -6,10 +6,11 @@ __version__ = "1.0.0"
 
 from network import Network
 from my_constants import *
-
+import os
 from threading import Thread
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import colormaps
 import time
 
 # Defining a function to update believes
@@ -163,6 +164,10 @@ class Agent:
                             self.box_reached = True
                 # Tell the other robots about this item
                 self.broadcast_message_flag = True
+                
+            # elif msg["header"] == BROADCAST_MSG and msg["Msg type"] == COMPLETED:
+            #     if self.box_reached == True:
+            #         quit()  # Stop the program because all robots opened their boxes
             
             elif msg["header"] == BROADCAST_MSG and msg["Msg type"] in [KEY_DISCOVERED, BOX_DISCOVERED]: # If another robot found an item
                 # Updating believes and found_cell_values
@@ -225,7 +230,7 @@ class Agent:
         # Go to the box if the key is collected and the position of the box is known
         elif self.box_position is not None and self.key_collected is True:
             next_move = go_towards_cell(self.x, self.y, self.w, self.h, self.box_position)
-        
+                
         # Find the best next move to explore the map
         else:
             max_weighted_sum = 0
@@ -249,67 +254,150 @@ class Agent:
         self.network.send(next_move)
 
 
-    def plot_believes(self):
+    def plot_believes(self, alpha=1.0, display=True):
         # Enable interactive mode to continue execution of the code after the plot is shown
-        # Note: The "block" parameter on the "plt.show()" function doesn't seem to work on macOS.
-        plt.ion()
-
-        plt.figure(self.agent_id+1, figsize=(6,6.5))
+        # Note: The "block" parameter on the "plt.show()" function doesn't seem to work on macOS.     
+        if display:          
+            plt.ion()
+        
+        plt.figure(self.agent_id+1, figsize=(self.w/3, self.h/3))
         plt.clf() # Clear the matplotlib plot every time the robot moves
-
+        
         # Creating colormap with explored cells and the agent's position
         colormap = np.copy(self.explo)
-        colormap[self.x, self.y] = 2
-        plt.pcolormesh(np.flip(colormap.T, 0), cmap='Blues', edgecolors='k', vmin=0, vmax=2)
-
+        colormap[self.x, self.y] = 3
+        
+        colors = ["Reds", "Blues", "Greens", "Oranges_r"]
+        cmap = colors[self.agent_id]
+        
+        if self.key_position or self.box_position:
+            if self.key_position:
+                colormap[self.key_position[0], self.key_position[1]] = 2
+            if self.box_position:
+                colormap[self.box_position[0], self.box_position[1]] = 2
+        
+        plt.pcolormesh(np.flip(colormap.T, 0), cmap=cmap, edgecolors='k', vmin=0, vmax=3, alpha=alpha)
+    
         # Creating array with cell values in visited cells and believes elsewhere
         cellval_or_belief = np.maximum(self.believes, self.cell_values)
-
-        # Adding cell values or believes as annotations on every cell
-        for i in range(self.w):
-            for j in range(self.h):
-                plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
         
-        # Add total number of visited cells and other important information
-        plt.annotate(f'Number of visited cells: {int(self.explo.sum())}', xy=(0,-1), color='black', annotation_clip=False)
-        plt.annotate(f'Position of the key: {self.key_position}', xy=(0,-2), color='black', annotation_clip=False)
-        plt.annotate(f'Position of the box: {self.box_position}', xy=(0,-3), color='black', annotation_clip=False)
-        plt.annotate(f'Key collected: {self.key_collected}', xy=(0,-4), color='black', annotation_clip=False)
-        plt.annotate(f'Box reached with key: {self.box_reached}', xy=(0,-5), color='black', annotation_clip=False)
-
+        if not self.box_reached:   # If the box hasn't been reached yet    
+            # Adding cell values or believes as annotations on every cell
+            for i in range(self.w):
+                for j in range(self.h):
+                    plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
+            
+            # Add total number of visited cells and other important information
+            plt.annotate(f'Number of visited cells: {int(np.sum(self.explo))}', xy=(0,-1), color='black', annotation_clip=False)
+            plt.annotate(f'Position of the key: {self.key_position}', xy=(0,-2), color='black', annotation_clip=False)
+            plt.annotate(f'Position of the box: {self.box_position}', xy=(0,-3), color='black', annotation_clip=False)
+            plt.annotate(f'Key collected: {self.key_collected}', xy=(0,-4), color='black', annotation_clip=False)
+            plt.annotate(f'Box reached with key: {self.box_reached}', xy=(0,-5), color='black', annotation_clip=False)
+            
+        else:
+            text = "Congrats! The robot reached its box!\nPress any key in the terminal to exit..."
+            plt.text(self.w/2, self.h/2, text, ha='center', va='center', color='black', fontsize=18, fontweight='bold')
+            
         plt.axis('equal')
         plt.axis('off')
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
         plt.tight_layout() # Reduce margins
-        plt.draw()
-        plt.pause(0.2) # Necessary for the plot to appear on macOS
+        
+        if display:
+            plt.draw()
+        
+        foldername = "robot" + str(self.agent_id+1)
+        full_path = os.path.join(IMG_PATH, foldername)
+        
+        if not os.path.exists(full_path):
+            os.makedirs(full_path)
+        
+        filename = "explo_" + str(int(np.sum(self.explo)))
+        plt.savefig(IMG_PATH + "/" + foldername + "/" + filename)
+        
+        if display:
+            plt.pause(0.2) # Necessary for the plot to appear on macOS
 
+    
+    def pathGIF(self):
+        import imageio
+    
+        foldername = "robot" + str(self.agent_id+1)
+        full_path = os.path.join(IMG_PATH, foldername)
+        
+        if not os.path.exists(full_path):
+            os.makedirs(full_path)
+        
+            
+        filenameGIF = "complete_path.gif"
+        
+        # Output GIF file path
+        output_gif_path = IMG_PATH + "/" + foldername + "/" + filenameGIF
 
+        # List all files in the images directory
+        image_files = [f for f in os.listdir(full_path) if f.endswith(('.png', '.jpg', '.jpeg'))]
+
+        # Create a list to store images
+        images = []
+
+        # Read each image and append it to the images list
+        for image_file in image_files:
+            image_path = os.path.join(full_path, image_file)
+            images.append(imageio.imread(image_path))
+
+        print(images)   
+         
+        # Save the images as a GIF
+        imageio.mimsave(output_gif_path, images, duration=20)  # Adjust duration as needed
+
+        print(f'GIF created and saved to {output_gif_path}')
 
 
 if __name__ == "__main__":
-    from random import randint
     import argparse
+    
+    IMG_PATH = "C:/Users/miaux/Documents/IPSA/2023-2024/Semester_1/In512_Systemes_Intelligents_Distribues/Project_IN512/scripts/Images"
+    
+    try:
+        # Iterate over all items in the folder
+        for item_name in os.listdir(IMG_PATH):
+            item_path = os.path.join(IMG_PATH, item_name)
+            
+            # Check if the path points to a directory
+            if os.path.isdir(item_path):
+                # Delete the directory and its contents recursively
+                os.rmdir(item_path)
+                print(f'Deleted folder: {item_name}')
+    
+        print(f'All folders in {IMG_PATH} have been deleted.')
+    
+    except Exception as e:
+        print(f'Error: {e}')
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--server_ip", help="Ip address of the server", type=str, default="localhost")
     args = parser.parse_args()
-
     agent = Agent(args.server_ip)
+    
     try:    #Manual control test
-        while True:
+        while not agent.box_reached:
             agent.explore_cell()
-            agent.plot_believes()
-            time.sleep(1)
+            agent.plot_believes(display=False)
+            # time.sleep(0.5)
             agent.choose_action()
-            #cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
-            #if cmds["header"] == BROADCAST_MSG:
-            #    cmds["Msg type"] = int(input("1 <-> Key discovered\n2 <-> Box discovered\n3 <-> Completed\n"))
-            #    cmds["position"] = (agent.x, agent.y)
-            #    cmds["owner"] = randint(0,3) # TODO: specify the owner of the item
-            #elif cmds["header"] == MOVE:
-            #    cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
-            #agent.network.send(cmds)
-            time.sleep(0.5) # Added time sleep to allow for receiving incoming message in other thread before next iteration
+            time.sleep(0.1) # Added time sleep to allow for receiving incoming message in other thread before next iteration
 
+                #cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
+                #if cmds["header"] == BROADCAST_MSG:
+                #    cmds["Msg type"] = int(input("1 <-> Key discovered\n2 <-> Box discovered\n3 <-> Completed\n"))
+                #    cmds["position"] = (agent.x, agent.y)
+                #    cmds["owner"] = randint(0,3) # TODO: specify the owner of the item
+                #elif cmds["header"] == MOVE:
+                #    cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
+                #agent.network.send(cmds)
+        agent.plot_believes(alpha=0.5)
+        input("Press any key to exit...")
+        agent.pathGIF()
+        
     except KeyboardInterrupt:
         pass
