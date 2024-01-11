@@ -10,7 +10,6 @@ import os
 from threading import Thread
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import colormaps
 import time
 
 # Defining a function to update believes
@@ -104,6 +103,21 @@ def go_towards_cell(x, y, w, h, target_position):
     return cell_to_move(x, y, chosen_next_cell)
 
 
+def delete_files(folder_path: str):
+    import os, shutil
+    
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+     
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+    
+
 class Agent:
     """ Class that implements the behaviour of each agent based on their perception and communication with other agents """
     def __init__(self, server_ip):
@@ -164,10 +178,6 @@ class Agent:
                             self.box_reached = True
                 # Tell the other robots about this item
                 self.broadcast_message_flag = True
-                
-            # elif msg["header"] == BROADCAST_MSG and msg["Msg type"] == COMPLETED:
-            #     if self.box_reached == True:
-            #         quit()  # Stop the program because all robots opened their boxes
             
             elif msg["header"] == BROADCAST_MSG and msg["Msg type"] in [KEY_DISCOVERED, BOX_DISCOVERED]: # If another robot found an item
                 # Updating believes and found_cell_values
@@ -257,7 +267,7 @@ class Agent:
     def plot_believes(self, alpha=1.0, display=True):
         # Enable interactive mode to continue execution of the code after the plot is shown
         # Note: The "block" parameter on the "plt.show()" function doesn't seem to work on macOS.     
-        if display:          
+        if display: # If we want to display the plot         
             plt.ion()
         
         plt.figure(self.agent_id+1, figsize=(self.w/3, self.h/3))
@@ -267,7 +277,7 @@ class Agent:
         colormap = np.copy(self.explo)
         colormap[self.x, self.y] = 3
         
-        colors = ["Reds", "Blues", "Greens", "Oranges_r"]
+        colors = ["Reds", "Blues", "Greens", "Oranges"]
         cmap = colors[self.agent_id]
         
         if self.key_position or self.box_position:
@@ -294,7 +304,7 @@ class Agent:
             plt.annotate(f'Key collected: {self.key_collected}', xy=(0,-4), color='black', annotation_clip=False)
             plt.annotate(f'Box reached with key: {self.box_reached}', xy=(0,-5), color='black', annotation_clip=False)
             
-        else:
+        else:   # If the box has been reached
             text = "Congrats! The robot reached its box!\nPress any key in the terminal to exit..."
             plt.text(self.w/2, self.h/2, text, ha='center', va='center', color='black', fontsize=18, fontweight='bold')
             
@@ -303,7 +313,7 @@ class Agent:
         plt.title(f'GridBelieves for robot {self.agent_id+1}')
         plt.tight_layout() # Reduce margins
         
-        if display:
+        if display: # If we want to display the plot 
             plt.draw()
         
         foldername = "robot" + str(self.agent_id+1)
@@ -312,74 +322,57 @@ class Agent:
         if not os.path.exists(full_path):
             os.makedirs(full_path)
         
-        filename = "explo_" + str(int(np.sum(self.explo)))
+        filename = "explo_" + str(int(np.sum(self.explo))) + ".jpg"
         plt.savefig(IMG_PATH + "/" + foldername + "/" + filename)
         
-        if display:
+        if display: # If we want to display the plot 
             plt.pause(0.2) # Necessary for the plot to appear on macOS
 
     
     def pathGIF(self):
         import imageio
-    
+        import re
+   
         foldername = "robot" + str(self.agent_id+1)
         full_path = os.path.join(IMG_PATH, foldername)
         
-        if not os.path.exists(full_path):
-            os.makedirs(full_path)
+        if not os.path.exists(full_path):   # Check if the folder doesn't exist
+            os.makedirs(full_path)  # Create the directory
         
-            
-        filenameGIF = "complete_path.gif"
+        filenameGIF = "complete_path_robot_" + str(self.agent_id+1) + ".gif"
+        GIF_path = IMG_PATH + "/" + foldername + "/" + filenameGIF   # GIF file relative path
+
+        def natural_sort_key(string):    # Function to sort the images based on their number
+            return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', string)]
         
-        # Output GIF file path
-        output_gif_path = IMG_PATH + "/" + foldername + "/" + filenameGIF
-
-        # List all files in the images directory
-        image_files = [f for f in os.listdir(full_path) if f.endswith(('.png', '.jpg', '.jpeg'))]
-
-        # Create a list to store images
-        images = []
-
+        image_files = sorted(os.listdir(full_path), key=natural_sort_key) # List all files in the images directory
+        images = [] # Create a list to store images
+        
         # Read each image and append it to the images list
         for image_file in image_files:
             image_path = os.path.join(full_path, image_file)
             images.append(imageio.imread(image_path))
+        
+        imageio.mimsave(GIF_path, images)   # Create a GIF of the robot path
 
-        print(images)   
-         
-        # Save the images as a GIF
-        imageio.mimsave(output_gif_path, images, duration=20)  # Adjust duration as needed
-
-        print(f'GIF created and saved to {output_gif_path}')
+        print(f'GIF created and saved to {GIF_path}')
 
 
 if __name__ == "__main__":
     import argparse
-    
-    IMG_PATH = "C:/Users/miaux/Documents/IPSA/2023-2024/Semester_1/In512_Systemes_Intelligents_Distribues/Project_IN512/scripts/Images"
-    
-    try:
-        # Iterate over all items in the folder
-        for item_name in os.listdir(IMG_PATH):
-            item_path = os.path.join(IMG_PATH, item_name)
-            
-            # Check if the path points to a directory
-            if os.path.isdir(item_path):
-                # Delete the directory and its contents recursively
-                os.rmdir(item_path)
-                print(f'Deleted folder: {item_name}')
-    
-        print(f'All folders in {IMG_PATH} have been deleted.')
-    
-    except Exception as e:
-        print(f'Error: {e}')
-    
+       
+    IMG_PATH = "./Images"
+
+    for foldername in os.listdir(IMG_PATH): # Check if there is folders in the directory
+        folder_path = os.path.join(IMG_PATH, foldername)
+        delete_files(folder_path)   # Delete every files in the folder specified
+        
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--server_ip", help="Ip address of the server", type=str, default="localhost")
     args = parser.parse_args()
     agent = Agent(args.server_ip)
     
-    try:    #Manual control test
+    try:
         while not agent.box_reached:
             agent.explore_cell()
             agent.plot_believes(display=False)
