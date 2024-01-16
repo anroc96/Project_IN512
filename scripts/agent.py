@@ -14,6 +14,21 @@ import time
 
 # Defining a function to update believes
 def update_believes(x, y, cell_val, w, h, believes, item_found):
+    """
+    Update the believes'grid of the robot
+
+    Args:
+        x (int): robot x-position
+        y (int): robot y-positions
+        cell_val (float): value of the cell in the environment
+        w (int): environment largeur
+        h (int): environment height
+        believes (ndarray): believes' grid of the robot
+        item_found (bool): whether an item as been found or not
+
+    Returns:
+        ndarray: the believes' grid of the robot
+    """
     # Updating belief for the current cell
     believes[x, y] = 0
     # Updating believes for other cells in map
@@ -36,6 +51,20 @@ def update_believes(x, y, cell_val, w, h, believes, item_found):
 
 # Defining a function to update known cell values
 def update_known_values(x, y, w, h, found_item_type, found_cell_values):
+    """
+    Update the known cell values in the map
+
+    Args:
+        x (int): robot x-position
+        y (int): robot y-position
+        w (int): environment largeur
+        h (int): environment height
+        found_item_type: type of the item 
+        found_cell_values (ndarray): array containing the locations of the items
+
+    Returns:
+        ndarray: the found cell values 
+    """
     for i in range(w): # For all columns in the map
         for j in range(h): # For all cells in one column
             if x-1 <= i and i <= x+1 and y-1 <= j and j <= y+1: # If that cell is one cell away from the item
@@ -53,6 +82,22 @@ def update_known_values(x, y, w, h, found_item_type, found_cell_values):
 
 # Defining a function to reset+update believes and update found_cell_values when a new item is found
 def new_item_update(x, y, w, h, found_item_type, believes, explo, cell_values, found_cell_values):
+    """Reset and updtate the believes' grid and update the found cell values when a new item is found
+
+    Args:
+        x (int): robot x-position
+        y (int): robot y-position
+        w (int): environment largeur
+        h (int): environment height
+        found_item_type: type of the item 
+        believes (ndarray): believes' grid of the robot
+        explo (ndarray): exploration map of the robot
+        cell_values (tuple): array containing every cell values of the environement
+        found_cell_values (ndarray): array containing the locations of the items
+
+    Returns:
+        (ndarray, ndarray): believes' grid of the robot and the found cell values 
+    """
     # Updating known cell values to ignore this newly found item
     found_cell_values = update_known_values(x, y, w, h, found_item_type, found_cell_values)
     # Resetting believes to serch for a new item
@@ -64,46 +109,13 @@ def new_item_update(x, y, w, h, found_item_type, believes, explo, cell_values, f
                 believes = update_believes(i, j, cell_values[i, j], w, h, believes, True)
     return believes, found_cell_values
 
-# Defining a function to convert a cell coordinate into a move
-def cell_to_move(x, y, chosen_next_cell):
-    if chosen_next_cell[0] == x-1: # If next cell is on the left
-        if chosen_next_cell[1] == y-1: # If next cell is above
-            next_move = {"header": MOVE, "direction": UP_LEFT}
-        elif chosen_next_cell[1] == y: # If next cell is on the same row
-            next_move = {"header": MOVE, "direction": LEFT}
-        elif chosen_next_cell[1] == y+1: # If next cell is under
-            next_move = {"header": MOVE, "direction": DOWN_LEFT}
-    elif chosen_next_cell[0] == x: # If next cell is on the same column
-        if chosen_next_cell[1] == y-1: # If next cell is above
-            next_move = {"header": MOVE, "direction": UP}
-        elif chosen_next_cell[1] == y: # If next cell is on the same row
-            next_move = {"header": MOVE, "direction": STAND}
-        elif chosen_next_cell[1] == y+1: # If next cell is under
-            next_move = {"header": MOVE, "direction": DOWN}
-    elif chosen_next_cell[0] == x+1: # If next cell is on the right
-        if chosen_next_cell[1] == y-1: # If next cell is above
-            next_move = {"header": MOVE, "direction": UP_RIGHT}
-        elif chosen_next_cell[1] == y: # If next cell is on the same row
-            next_move = {"header": MOVE, "direction": RIGHT}
-        elif chosen_next_cell[1] == y+1: # If next cell is under
-            next_move = {"header": MOVE, "direction": DOWN_RIGHT}
-    return next_move
+def delete_files(folder_path):
+    """
+    Delete all files in a given folder
 
-# Defining a function to choose the best next move to go towards a certain cell
-def go_towards_cell(x, y, w, h, target_position):
-    max_distance = np.linalg.norm([w, h])
-    for i in range(x-1, x+2): # For colums maximum one cell away
-        for j in range(y-1, y+2): # For rows maximum one cell away
-            if i in range(w) and j in range(h): # If the indexes are inside the map
-                distance = np.linalg.norm([target_position[0]-i, target_position[1]-j]) # Calculate the distance to the key
-                if distance < max_distance:
-                    chosen_next_cell = (i, j)
-                    max_distance = distance
-    # Convert cell coordinates into move
-    return cell_to_move(x, y, chosen_next_cell)
-
-
-def delete_files(folder_path: str):
+    Args:
+        folder_path (str): the absolute or relative path to the folder
+    """
     import os, shutil
     
     for filename in os.listdir(folder_path):
@@ -132,7 +144,7 @@ class Agent:
         self.w, self.h = env_conf["w"], env_conf["h"]   #environment dimensions
         self.cell_val = env_conf["cell_val"] #value of the cell the agent is located in
         Thread(target=self.msg_cb, daemon=True).start()
-
+       
         self.explo = np.zeros((env_conf["w"], env_conf["h"])) # Matrix of the explorated cells (0: not explorated, 1: explorated)
         self.believes = np.ones((env_conf["w"], env_conf["h"])) # Matrix of believes (0: no item can be there, 1: it is possible that there is an item)
         # Note: If the agent finds a new non zero value, it will focus on this item and put zeros everywhere far from its location even if there may be \
@@ -191,7 +203,65 @@ class Agent:
                         self.box_position = msg["position"]
 
 
+    def cell2move(self, chosen_next_cell):
+        """
+        Convert a cell coordinate into a move to go to a specific position
+
+        Args:
+            chosen_next_cell (tuple): next coordinate the robot as to reach
+
+        Returns:
+            dict: the robot's next move message
+        """
+        if chosen_next_cell[0] == self.x-1: # If next cell is on the left
+            if chosen_next_cell[1] == self.y-1: # If next cell is above
+                next_move = {"header": MOVE, "direction": UP_LEFT}
+            elif chosen_next_cell[1] == self.y: # If next cell is on the same row
+                next_move = {"header": MOVE, "direction": LEFT}
+            elif chosen_next_cell[1] == self.y+1: # If next cell is under
+                next_move = {"header": MOVE, "direction": DOWN_LEFT}
+        elif chosen_next_cell[0] == self.x: # If next cell is on the same column
+            if chosen_next_cell[1] == self.y-1: # If next cell is above
+                next_move = {"header": MOVE, "direction": UP}
+            elif chosen_next_cell[1] == self.y: # If next cell is on the same row
+                next_move = {"header": MOVE, "direction": STAND}
+            elif chosen_next_cell[1] == self.y+1: # If next cell is under
+                next_move = {"header": MOVE, "direction": DOWN}
+        elif chosen_next_cell[0] == self.x+1: # If next cell is on the right
+            if chosen_next_cell[1] == self.y-1: # If next cell is above
+                next_move = {"header": MOVE, "direction": UP_RIGHT}
+            elif chosen_next_cell[1] == self.y: # If next cell is on the same row
+                next_move = {"header": MOVE, "direction": RIGHT}
+            elif chosen_next_cell[1] == self.y+1: # If next cell is under
+                next_move = {"header": MOVE, "direction": DOWN_RIGHT}
+        return next_move
+    
+
+    def go_towards_cell(self, target_position):
+        """
+        Choose the best next move to go towards a certain cell
+
+        Args:
+            target_position (tuple): position of the target (key or box here)
+
+        Returns:
+            dict: the robot's best move message
+        """
+        max_distance = np.linalg.norm([self.w, self.h])
+        for i in range(self.x-1, self.x+2): # For colums maximum one cell away
+            for j in range(self.y-1, self.y+2): # For rows maximum one cell away
+                if i in range(self.w) and j in range(self.h): # If the indexes are inside the map
+                    distance = np.linalg.norm([target_position[0]-i, target_position[1]-j]) # Calculate the distance to the key
+                    if distance < max_distance:
+                        chosen_next_cell = (i, j)
+                        max_distance = distance
+        # Convert cell coordinates into move
+        return self.cell2move(chosen_next_cell)
+    
+    
     def explore_cell(self):
+        """ Explore the cell the robot is on """
+        
         # Verify if the robot is collecting the key or reaching the box with the key
         if (self.x, self.y) == self.key_position:
             self.key_collected = True
@@ -217,8 +287,38 @@ class Agent:
         # Updating believes
         self.believes = update_believes(self.x, self.y, self.cell_val, self.w, self.h, self.believes, known_cell_val)
 
+    
+    def explore_map(self):
+        """
+        Exploring algorithm of the robot
+
+        Returns:
+            tuple: the robot's move message
+        """
+        max_weighted_sum = 0
+        for i in range(self.x-1, self.x+2): # For colums maximum one cell away
+            for j in range(self.y-1, self.y+2): # For rows maximum one cell away
+                if i in range(self.w) and j in range(self.h) and (i, j) != (self.x, self.y): # If the indexes are inside the map and the cell is not the current cell
+                    
+                    # Count number of cells with a belief of 1 around that cell (sum of 1/distances^2)
+                    weighted_sum = 0 
+                    
+                    for ii in range(self.w): # For all columns in the map
+                        for jj in range(self.h): # For all cells in this column
+                            if self.believes[ii, jj] == 1: # If that cell has a belief of 1
+                                distance2 = (ii-i)**2 + (jj-j)**2 # Calculate the squared distance between these cells
+                                weighted_sum += 1/(distance2+0.0000001) # Greater weight for closer cells
+                    
+                    if weighted_sum > max_weighted_sum:
+                        chosen_next_cell = (i, j)
+                        max_weighted_sum = weighted_sum
+                        
+        # Convert cell coordinates into move
+        return self.cell2move(chosen_next_cell)
+
 
     def choose_action(self):
+        """ Choose a robot action """
         # Verify if the robot's quest is completed
         if self.box_reached is True:
             next_move = {"header": BROADCAST_MSG, "Msg type": COMPLETED, "position": (self.x, self.y), "owner": self.agent_id} # Broadcast that the quest is completed
@@ -235,36 +335,28 @@ class Agent:
 
         # Go collect the key if it is another robot that found it first
         elif self.key_position is not None and self.key_collected is False:
-            next_move = go_towards_cell(self.x, self.y, self.w, self.h, self.key_position)
+            next_move = self.go_towards_cell(self.key_position)
 
         # Go to the box if the key is collected and the position of the box is known
         elif self.box_position is not None and self.key_collected is True:
-            next_move = go_towards_cell(self.x, self.y, self.w, self.h, self.box_position)
-                
-        # Find the best next move to explore the map
+            next_move = self.go_towards_cell(self.box_position)
+        
+        # Find the best next move to explore the map     
         else:
-            max_weighted_sum = 0
-            for i in range(self.x-1, self.x+2): # For colums maximum one cell away
-                for j in range(self.y-1, self.y+2): # For rows maximum one cell away
-                    if i in range(self.w) and j in range(self.h) and (i, j) != (self.x, self.y): # If the indexes are inside the map and the cell is not the current cell
-                        # Count number of cells with a belief of 1 around that cell (sum of 1/distances^2)
-                        weighted_sum = 0 
-                        for ii in range(self.w): # For all columns in the map
-                            for jj in range(self.h): # For all cells in this column
-                                if self.believes[ii, jj] == 1: # If that cell has a belief of 1
-                                    distance2 = (ii-i)**2 + (jj-j)**2 # Calculate the squared distance between these cells
-                                    weighted_sum += 1/(distance2+0.0000001) # Greater weight for closer cells
-                        if weighted_sum > max_weighted_sum:
-                            chosen_next_cell = (i, j)
-                            max_weighted_sum = weighted_sum
-            # Convert cell coordinates into move
-            next_move = cell_to_move(self.x, self.y, chosen_next_cell)
+            next_move = self.explore_map()
         
         # Execute chosen action
         self.network.send(next_move)
 
 
     def plot_believes(self, alpha=1.0, display=True):
+        """
+        Plot the believes' grid of the robot
+
+        Args:
+            alpha (float, optional): Opacity of the window (1.0=vivid, 0.0=transparent). Defaults to 1.0.
+            display (bool, optional): display the grid on the screen. Defaults to True.
+        """
         # Enable interactive mode to continue execution of the code after the plot is shown
         # Note: The "block" parameter on the "plt.show()" function doesn't seem to work on macOS.     
         if display: # If we want to display the plot         
@@ -295,7 +387,10 @@ class Agent:
             # Adding cell values or believes as annotations on every cell
             for i in range(self.w):
                 for j in range(self.h):
-                    plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
+                    if (i, self.w-(j+1)) == (self.x, self.y):
+                        plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='white')
+                    else:
+                        plt.annotate(str(round(np.flip(cellval_or_belief.T, 0)[j][i], 1)), xy=(i+0.5, j+0.5), ha='center', va='center', color='black')
             
             # Add total number of visited cells and other important information
             plt.annotate(f'Number of visited cells: {int(np.sum(self.explo))}', xy=(0,-1), color='black', annotation_clip=False)
@@ -319,14 +414,14 @@ class Agent:
         foldername = "robot" + str(self.agent_id+1)
         full_path = os.path.join(IMG_PATH, foldername)
         
-        if not os.path.exists(full_path):
-            os.makedirs(full_path)
+        if not os.path.exists(full_path):   # Check if the folder doesn't exist
+            os.makedirs(full_path)          # Create the directory
         
         filename = "explo_" + str(int(np.sum(self.explo))) + ".jpg"
         plt.savefig(IMG_PATH + "/" + foldername + "/" + filename)
         
-        if display: # If we want to display the plot 
-            plt.pause(0.2) # Necessary for the plot to appear on macOS
+        if display:         # If we want to display the plot 
+            plt.pause(0.2)  # Necessary for the plot to appear on macOS
 
     
     def pathGIF(self):
@@ -337,7 +432,7 @@ class Agent:
         full_path = os.path.join(IMG_PATH, foldername)
         
         if not os.path.exists(full_path):   # Check if the folder doesn't exist
-            os.makedirs(full_path)  # Create the directory
+            os.makedirs(full_path)          # Create the directory
         
         filenameGIF = "complete_path_robot_" + str(self.agent_id+1) + ".gif"
         GIF_path = IMG_PATH + "/" + foldername + "/" + filenameGIF   # GIF file relative path
@@ -354,7 +449,6 @@ class Agent:
             images.append(imageio.imread(image_path))
         
         imageio.mimsave(GIF_path, images)   # Create a GIF of the robot path
-
         print(f'GIF created and saved to {GIF_path}')
 
 
@@ -362,6 +456,9 @@ if __name__ == "__main__":
     import argparse
        
     IMG_PATH = "./Images"
+    
+    if not os.path.exists(IMG_PATH):    # Check if the folder doesn't exist
+        os.makedirs(IMG_PATH)           # Create the directory
 
     for foldername in os.listdir(IMG_PATH): # Check if there is folders in the directory
         folder_path = os.path.join(IMG_PATH, foldername)
@@ -379,15 +476,6 @@ if __name__ == "__main__":
             # time.sleep(0.5)
             agent.choose_action()
             time.sleep(0.1) # Added time sleep to allow for receiving incoming message in other thread before next iteration
-
-                #cmds = {"header": int(input("0 <-> Broadcast msg\n1 <-> Get data\n2 <-> Move\n3 <-> Get nb connected agents\n4 <-> Get nb agents\n5 <-> Get item owner\n"))}
-                #if cmds["header"] == BROADCAST_MSG:
-                #    cmds["Msg type"] = int(input("1 <-> Key discovered\n2 <-> Box discovered\n3 <-> Completed\n"))
-                #    cmds["position"] = (agent.x, agent.y)
-                #    cmds["owner"] = randint(0,3) # TODO: specify the owner of the item
-                #elif cmds["header"] == MOVE:
-                #    cmds["direction"] = int(input("0 <-> Stand\n1 <-> Left\n2 <-> Right\n3 <-> Up\n4 <-> Down\n5 <-> UL\n6 <-> UR\n7 <-> DL\n8 <-> DR\n"))
-                #agent.network.send(cmds)
         agent.plot_believes(alpha=0.5)
         input("Press any key to exit...")
         agent.pathGIF()
