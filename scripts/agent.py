@@ -14,8 +14,7 @@ import time
 
 # Defining a function to update believes
 def update_believes(x, y, cell_val, w, h, believes, item_found):
-    """
-    Update the believes'grid of the robot
+    """ Update the believes'grid of the robot
 
     Args:
         x (int): robot x-position
